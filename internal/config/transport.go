@@ -69,6 +69,7 @@ func NewTransportConfig(trustedCAPath string) *TransportConfig {
 
 	httpClient := &http.Client{
 		Transport: t,
+		Timeout:   15 * time.Second,
 	}
 
 	return &TransportConfig{

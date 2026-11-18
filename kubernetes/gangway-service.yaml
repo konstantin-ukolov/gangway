@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gangway
+  namespace: dex
+  labels:
+    app.kubernetes.io/name: gangway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: gangway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

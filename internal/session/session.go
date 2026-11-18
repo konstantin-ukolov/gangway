@@ -29,9 +29,12 @@ type Session struct {
 
 // New inits a Session with CookieStore
 func New(sessionSecurityKey string) *Session {
-	return &Session{
-		Session: NewCustomCookieStore(generateSessionKeys(sessionSecurityKey)),
-	}
+	store := NewCustomCookieStore(generateSessionKeys(sessionSecurityKey))
+	store.Options.Secure = true
+	store.Options.HttpOnly = true
+	store.Options.SameSite = http.SameSiteLaxMode
+	store.Options.MaxAge = 8 * 60 * 60
+	return &Session{Session: store}
 }
 
 // generateSessionKeys creates a signed encryption key for the cookie store
