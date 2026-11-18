@@ -6,3 +6,27 @@ vendor/
 cmd/gangway/bindata.go
 .idea/
 gangway.kubeconfig
+
+# Local Kubernetes credentials and rendered manifests containing secrets.
+*.kubeconfig
+*.kubeconfig.yaml
+kubeconfig*
+**/kubeconfig*
+
+# Local secrets, environment files, certificates, and private keys.
+.env
+.env.*
+!.env.example
+**/*secret.yaml
+**/*secret.yml
+**/*-secret.yaml
+**/*-secret.yml
+**/*credentials*.yaml
+**/*credentials*.yml
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Keep the redacted manifest template under version control.
+!kubernetes/gangway-secret.example.yaml

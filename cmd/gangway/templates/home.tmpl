@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>{{ .AppName }}</title>
+
+  <!-- CSS  -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+  <style>
+    :root { color-scheme: light; --bg: #f5f7fb; --surface: #fff; --text: #172033; --muted: #5f6b7a; --primary: #2563eb; --nav: #172554; --code-bg: #111827; }
+    [data-theme="dark"] { color-scheme: dark; --bg: #0f172a; --surface: #172033; --text: #e5e7eb; --muted: #aab4c3; --primary: #60a5fa; --nav: #020617; --code-bg: #020617; }
+    body { background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
+    nav { background: var(--nav); }
+     .theme-toggle-item { height: 64px; display: flex; align-items: center; }
+     .language-button { background: transparent; border: 1px solid rgba(255,255,255,.45); border-radius: 4px; color: #fff; cursor: pointer; line-height: 1.2; margin-left: 8px; padding: 7px 10px; }
+     .theme-toggle { background: transparent; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: #fff; cursor: pointer; display: inline-flex; align-items: center; line-height: 1.2; margin: 0 0 0 8px; padding: 7px 12px; white-space: nowrap; }
+     .card, .collection { background: var(--surface); color: var(--text); }
+     .muted { color: var(--muted); }
+     .cluster-name { color: var(--primary); font-weight: 700; white-space: nowrap; }
+     .company-brand { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-weight: 600; }
+     .company-brand img { width: 34px; height: 34px; object-fit: contain; vertical-align: middle; }
+     .company-brand img { filter: brightness(0) invert(1); }
+    pre.bash {
+        background-color: black;
+        color: #49fb35;
+        font-size: small;
+        font-family: Consolas,Monaco,Lucida Console,Liberation Mono,DejaVu Sans Mono,Bitstream Vera Sans Mono,Courier New, monospace;
+        overflow: auto;
+        word-wrap: normal;
+        white-space: pre;
+    }
+
+    .icon-block {
+    padding: 0 15px;
+    }
+    .icon-block .material-icons {
+        font-size: inherit;
+    }
+</style>
+</head>
+<body>
+  <nav role="navigation">
+    <div class="nav-wrapper container"><a id="logo-container" href="#" class="brand-logo company-brand">{{ if .CompanyLogo }}<img src="{{ .CompanyLogo }}" alt="{{ .CompanyName }}">{{ end }}<span>{{ .CompanyName }}</span></a>
+      <ul class="right hide-on-med-and-down">
+         <li class="theme-toggle-item"><button class="language-button" type="button" data-language-toggle aria-label="Сменить язык">EN</button><button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему">☾ Тёмная тема</button></li>
+      </ul>
+
+      <ul id="nav-mobile" class="side-nav">
+
+      </ul>
+      <a href="#" data-activates="nav-mobile" class="button-collapse"><i class="material-icons">menu</i></a>
+    </div>
+  </nav>
+  <div class="section no-pad-bot" id="index-banner">
+    <div class="container">
+      <br><br>
+       <h1 class="header center">{{ .AppName }}</h1>
+       <div class="row center">
+         <h5 class="header col s12 light muted"><span data-i18n="signInTo">Войти в кластер Kubernetes</span> <span class="cluster-name">{{ .ClusterName }}</span></h5>
+      </div>
+      <div class="row center">
+         <a href="{{ .HTTPPath }}/login" id="download-button" class="btn-large waves-effect waves-light blue" data-i18n="signIn">Войти</a>
+      </div>
+      <br><br>
+
+   </div>
+  </div>
+
+
+   <script>
+     (function () {
+       var root = document.documentElement;
+       var saved = localStorage.getItem('gangway-theme');
+       var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+       var button;
+         function apply(value) {
+           root.setAttribute('data-theme', value);
+           var en = root.lang === 'en';
+           if (button) {
+             button.textContent = value === 'dark' ? (en ? '☀ Light theme' : '☀ Светлая тема') : (en ? '☾ Dark theme' : '☾ Тёмная тема');
+             button.setAttribute('aria-label', en ? 'Change theme' : 'Сменить тему');
+           }
+         }
+         new MutationObserver(function () { apply(theme); }).observe(root, { attributes: true, attributeFilter: ['lang'] });
+        var langButton;
+        var translations = { en: { signInTo: 'Sign in to Kubernetes cluster', signIn: 'Sign in' }, ru: { signInTo: 'Войти в кластер Kubernetes', signIn: 'Войти' } };
+        function applyLanguage(lang) { document.documentElement.lang = lang; Object.keys(translations[lang]).forEach(function (key) { document.querySelectorAll('[data-i18n="' + key + '"]').forEach(function (item) { item.textContent = translations[lang][key]; }); }); if (langButton) langButton.textContent = lang === 'ru' ? 'RU' : 'EN'; }
+        document.addEventListener('DOMContentLoaded', function () {
+          button = document.querySelector('[data-theme-toggle]');
+          langButton = document.querySelector('[data-language-toggle]');
+          apply(theme);
+          if (button) button.addEventListener('click', function () { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('gangway-theme', theme); apply(theme); });
+          var language = localStorage.getItem('gangway-language') || 'ru'; applyLanguage(language);
+          if (langButton) langButton.addEventListener('click', function () { language = language === 'ru' ? 'en' : 'ru'; localStorage.setItem('gangway-language', language); applyLanguage(language); });
+        });
+     }());
+   </script>
+   <!--  Scripts-->
+  <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+  <script src="js/materialize.js"></script>
+  <script src="js/init.js"></script>
+
+  </body>
+</html>

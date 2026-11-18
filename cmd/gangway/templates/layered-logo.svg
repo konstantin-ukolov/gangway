@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 320 320"
+     role="img"
+     aria-labelledby="title desc">
+  <title id="title">Layered cards logo</title>
+  <desc id="desc">Three overlapping rounded outline shapes converging at the left.</desc>
+  <g fill="none"
+     stroke="#303030"
+     stroke-width="8.5"
+     stroke-linecap="round"
+     stroke-linejoin="round">
+    <!-- Rear / lower sheet -->
+    <path d="
+      M 55,164
+      C 82,187 111,218 132,246
+      C 146,264 164,268 183,256
+      L 264,202
+      C 280,191 278,180 261,170
+      L 207,139
+    "/>
+
+    <!-- Middle sheet -->
+    <path d="
+      M 55,164
+      C 83,139 113,111 137,94
+      C 147,87 157,86 169,89
+      L 251,105
+      C 270,109 275,120 262,135
+      L 198,214
+      C 184,232 166,237 148,228
+      Z
+    "/>
+
+    <!-- Front / upper sheet -->
+    <path d="
+      M 55,164
+      C 76,125 99,78 120,56
+      C 126,50 135,47 145,46
+      L 216,37
+      C 234,35 242,43 235,60
+      L 190,177
+      C 182,199 166,210 145,204
+      Z
+    "/>
+  </g>
+</svg>

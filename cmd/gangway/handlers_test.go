@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ghodss/yaml"
+	"sigs.k8s.io/yaml"
 
 	"github.com/gorilla/sessions"
 	"github.com/heptiolabs/gangway/internal/config"
@@ -38,6 +38,12 @@ import (
 func testInit() {
 	gangwayUserSession = session.New("test")
 	transportConfig = config.NewTransportConfig("")
+	verifyIDToken = func(_ context.Context, _ string) (map[string]interface{}, error) {
+		return map[string]interface{}{
+			"sub": "gangway@heptio.com",
+			"iss": "GangwayTest",
+		}, nil
+	}
 
 	oauth2Cfg = &oauth2.Config{
 		ClientID:     "cfg.ClientID",
@@ -275,6 +281,7 @@ func TestKubeconfigHandler(t *testing.T) {
 				APIServerURL:  "https://kubernetes",
 				ClientID:      "someClientID",
 				ClientSecret:  "someClientSecret",
+				IssuerURL:     "GangwayTest",
 			},
 			params: map[string]string{
 				"id_token":      "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJHYW5nd2F5VGVzdCIsImlhdCI6MTU0MDA0NjM0NywiZXhwIjoxODg3MjAxNTQ3LCJhdWQiOiJnYW5nd2F5LmhlcHRpby5jb20iLCJzdWIiOiJnYW5nd2F5QGhlcHRpby5jb20iLCJHaXZlbk5hbWUiOiJHYW5nIiwiU3VybmFtZSI6IldheSIsIkVtYWlsIjoiZ2FuZ3dheUBoZXB0aW8uY29tIiwiR3JvdXBzIjoiZGV2LGFkbWluIn0.zNG4Dnxr76J0p4phfsAUYWunioct0krkMiunMynlQsU",
@@ -459,8 +466,10 @@ type FakeToken struct {
 
 // Exchange takes an oauth2 auth token and exchanges for an id_token
 func (f *FakeToken) Exchange(ctx context.Context, code string) (*oauth2.Token, error) {
-	return &oauth2.Token{
+	return (&oauth2.Token{
 		AccessToken:  "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJHYW5nd2F5VGVzdCIsImlhdCI6MTU0MDA0NjM0NywiZXhwIjoxODg3MjAxNTQ3LCJhdWQiOiJnYW5nd2F5LmhlcHRpby5jb20iLCJzdWIiOiJnYW5nd2F5QGhlcHRpby5jb20iLCJHaXZlbk5hbWUiOiJHYW5nIiwiU3VybmFtZSI6IldheSIsIkVtYWlsIjoiZ2FuZ3dheUBoZXB0aW8uY29tIiwiR3JvdXBzIjoiZGV2LGFkbWluIn0.zNG4Dnxr76J0p4phfsAUYWunioct0krkMiunMynlQsU",
 		RefreshToken: "4567",
-	}, nil
+	}).WithExtra(map[string]interface{}{
+		"id_token": "test-id-token",
+	}), nil
 }

@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"embed"
 	"flag"
 	"fmt"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	coreosoidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/heptiolabs/gangway/internal/config"
 	"github.com/heptiolabs/gangway/internal/oidc"
 	"github.com/heptiolabs/gangway/internal/session"
@@ -38,11 +40,19 @@ var oauth2Cfg *oauth2.Config
 var o2token oidc.OAuth2Token
 var gangwayUserSession *session.Session
 var transportConfig *config.TransportConfig
+var oidcVerifier *coreosoidc.IDTokenVerifier
+var verifyIDToken func(context.Context, string) (map[string]interface{}, error)
+
+//go:embed templates/*
+var templateFS embed.FS
 
 // wrapper function for http logging
 func httpLogger(fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		defer log.Printf("%s %s %s", r.Method, r.URL, r.RemoteAddr)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Cache-Control", "no-store")
+		defer log.Printf("%s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
 		fn(w, r)
 	}
 }
@@ -74,6 +84,24 @@ func main() {
 	}
 
 	transportConfig = config.NewTransportConfig(cfg.TrustedCAPath)
+	providerContext := context.WithValue(context.Background(), oauth2.HTTPClient, transportConfig.HTTPClient)
+	provider, err := coreosoidc.NewProvider(providerContext, cfg.IssuerURL)
+	if err != nil {
+		log.Errorf("Could not initialize OIDC provider: %s", err)
+		os.Exit(1)
+	}
+	oidcVerifier = provider.Verifier(&coreosoidc.Config{ClientID: cfg.ClientID})
+	verifyIDToken = func(ctx context.Context, raw string) (map[string]interface{}, error) {
+		token, err := oidcVerifier.Verify(ctx, raw)
+		if err != nil {
+			return nil, err
+		}
+		claims := make(map[string]interface{})
+		if err := token.Claims(&claims); err != nil {
+			return nil, err
+		}
+		return claims, nil
+	}
 	gangwayUserSession = session.New(cfg.SessionSecurityKey)
 
 	loginRequiredHandlers := alice.New(loginRequired)
@@ -81,6 +109,23 @@ func main() {
 	http.HandleFunc(cfg.GetRootPathPrefix(), httpLogger(homeHandler))
 	http.HandleFunc(fmt.Sprintf("%s/login", cfg.HTTPPath), httpLogger(loginHandler))
 	http.HandleFunc(fmt.Sprintf("%s/callback", cfg.HTTPPath), httpLogger(callbackHandler))
+	http.HandleFunc(fmt.Sprintf("%s/assets/layered-logo.svg", cfg.HTTPPath), func(w http.ResponseWriter, r *http.Request) {
+		logo, err := templateFS.ReadFile("templates/layered-logo.svg")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(logo)
+	})
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
 
 	// middleware'd routes
 	http.Handle(fmt.Sprintf("%s/logout", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(logoutHandler))
@@ -90,9 +135,11 @@ func main() {
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	// create http server with timeouts
 	httpServer := &http.Server{
-		Addr:         bindAddr,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:              bindAddr,
+		ReadTimeout:       10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	if cfg.ServeTLS {
@@ -132,6 +179,9 @@ func main() {
 	<-signalChan
 
 	log.Println("Shutdown signal received, exiting.")
-	// close the HTTP server
-	httpServer.Shutdown(context.Background())
+	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownContext); err != nil {
+		log.Errorf("HTTP server shutdown failed: %s", err)
+	}
 }

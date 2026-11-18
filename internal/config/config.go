@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"strings"
 
 	"github.com/kelseyhightower/envconfig"
@@ -29,6 +30,10 @@ type Config struct {
 	Port int    `yaml:"port"`
 
 	ClusterName            string   `yaml:"clusterName" envconfig:"cluster_name"`
+	AppName                string   `yaml:"appName" envconfig:"app_name"`
+	CompanyName            string   `yaml:"companyName" envconfig:"company_name"`
+	CompanyLogo            string   `yaml:"companyLogo" envconfig:"company_logo"`
+	IssuerURL              string   `yaml:"issuerURL" envconfig:"issuer_url"`
 	AuthorizeURL           string   `yaml:"authorizeURL" envconfig:"authorize_url"`
 	TokenURL               string   `yaml:"tokenURL" envconfig:"token_url"`
 	ClientID               string   `yaml:"clientID" envconfig:"client_id"`
@@ -57,6 +62,9 @@ func NewConfig(configFile string) (*Config, error) {
 	cfg := &Config{
 		Host:                   "0.0.0.0",
 		Port:                   8080,
+		AppName:                "Gangway",
+		CompanyName:            "",
+		CompanyLogo:            "/assets/layered-logo.svg",
 		AllowEmptyClientSecret: false,
 		Scopes:                 []string{"openid", "profile", "email", "offline_access"},
 		UsernameClaim:          "nickname",
@@ -102,8 +110,11 @@ func (cfg *Config) Validate() error {
 		bad    bool
 		errMsg string
 	}{
+		{strings.TrimSpace(cfg.AppName) == "", "no appName specified"},
+		{strings.TrimSpace(cfg.ClusterName) == "", "no clusterName specified"},
 		{cfg.AuthorizeURL == "", "no authorizeURL specified"},
 		{cfg.TokenURL == "", "no tokenURL specified"},
+		{cfg.IssuerURL == "", "no issuerURL specified"},
 		{cfg.ClientID == "", "no clientID specified"},
 		{cfg.ClientSecret == "" && !cfg.AllowEmptyClientSecret, "no clientSecret specified"},
 		{cfg.RedirectURL == "", "no redirectURL specified"},
@@ -114,6 +125,18 @@ func (cfg *Config) Validate() error {
 	for _, check := range checks {
 		if check.bad {
 			return fmt.Errorf("invalid config: %s", check.errMsg)
+		}
+	}
+	for name, value := range map[string]string{
+		"issuerURL":    cfg.IssuerURL,
+		"authorizeURL": cfg.AuthorizeURL,
+		"tokenURL":     cfg.TokenURL,
+		"redirectURL":  cfg.RedirectURL,
+		"apiServerURL": cfg.APIServerURL,
+	} {
+		parsed, err := url.ParseRequestURI(value)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			return fmt.Errorf("invalid config: %s must be an absolute HTTPS URL", name)
 		}
 	}
 	return nil

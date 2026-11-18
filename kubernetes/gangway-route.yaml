@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: gangway
+  namespace: dex
+spec:
+  hostnames:
+    - login-k8s.gistech.mng
+  parentRefs:
+    - name: dex-gateway
+      sectionName: websecure
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: gangway
+          port: 8080

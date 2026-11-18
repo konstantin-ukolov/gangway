@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+  <title>{{ .AppName }} — {{ .ClusterName }}</title>
+
+  <!-- CSS  -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+
+  <!-- Prism -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/prism.min.js" integrity="sha256-jTGzLAqOAcOL+ALD2f2tvFY7fs6dwkOeo88xiuVHaRk=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/components/prism-bash.min.js" integrity="sha256-Ch5rv5tgAdVMCh7Wqb0UOcXkQAHNFSezi+0v/0z6xfw=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/components/prism-yaml.min.js" integrity="sha256-pxsoS7PqPuy6D5T0Dq2PEXKJ5SRlIkdG8hpoMxQ0YlM=" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/themes/prism-tomorrow.min.css" integrity="sha256-4S9ufRr1EqaUFFeM9/52GH68Hs1Sbvx8eFXBWpl8zPI=" crossorigin="anonymous" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/plugins/toolbar/prism-toolbar.min.css" integrity="sha256-xY7/SUa769r0PZ1ytZPFj2WqnOZYaYSKbX1hVTiQlcA=" crossorigin="anonymous" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/plugins/toolbar/prism-toolbar.min.js" integrity="sha256-OvKYJLcYRP3ZIPilT03rynyZfkdGFwzCwU82NB4/AT4=" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.0/clipboard.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.14.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js" integrity="sha256-s+Z1sBUQFaaw7xeAnWb/oS8gBM4MEKiEWMRJ0p+/xbc=" crossorigin="anonymous"></script>
+   <style>
+       :root { color-scheme: light; --bg: #f5f7fb; --surface: #fff; --text: #172033; --muted: #5f6b7a; --nav: #172554; --primary: #2563eb; }
+       [data-theme="dark"] { color-scheme: dark; --bg: #0f172a; --surface: #172033; --text: #e5e7eb; --muted: #aab4c3; --nav: #020617; --primary: #60a5fa; }
+       body { background: var(--bg); color: var(--text); transition: background .2s, color .2s; }
+       nav { background: var(--nav); }
+         .theme-toggle-item { height: 64px; display: flex; align-items: center; }
+         .language-button { background: transparent; border: 1px solid rgba(255,255,255,.45); border-radius: 4px; color: #fff; cursor: pointer; line-height: 1.2; margin-left: 8px; padding: 7px 10px; }
+        .theme-toggle { background: transparent; border: 1px solid rgba(255,255,255,.45); border-radius: 999px; color: #fff; cursor: pointer; display: inline-flex; align-items: center; line-height: 1.2; margin: 0 0 0 8px; padding: 7px 12px; white-space: nowrap; }
+         .command-toolbar { display: flex; justify-content: flex-end; margin: 8px 0; }
+         .copy-button { margin: 0; }
+        .os-tabs { display: flex; gap: 8px; margin: 18px 0 8px; }
+        .os-tab { border: 1px solid var(--primary); border-radius: 4px; background: transparent; color: var(--primary); cursor: pointer; padding: 8px 14px; }
+        .os-tab.active { background: var(--primary); color: #fff; }
+        .os-panel { display: none; clear: both; }
+        .os-panel.active { display: block; }
+        .command-block { position: relative; }
+        .muted { color: var(--muted); }
+        html[lang="ru"] [data-lang="en"], html[lang="en"] [data-lang="ru"] { display: none; }
+        .token-status, .claims-details { background: var(--surface); border: 1px solid var(--muted); border-radius: 8px; padding: 16px; margin: 20px 0; overflow-wrap: anywhere; }
+        .token-status { padding: 10px 14px; margin: 14px 0; }
+        .token-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; margin: 0; }
+        .token-summary p { margin: 0; }
+        .token-help { margin-top: 10px; }
+        .token-help summary { cursor: pointer; color: var(--primary); }
+        .token-help p { margin: 10px 0 0; }
+        .claims-details summary { cursor: pointer; font-weight: 600; }
+         .claims-details dl { display: flex; flex-wrap: wrap; gap: 8px; position: relative; margin: 14px 0; }
+         .claims-details dt { font-family: monospace; font-size: 13px; border: 1px dashed var(--muted); border-radius: 5px; padding: 4px 8px; cursor: help; }
+         .claims-details dt:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+         .claims-details dd { display: none; position: absolute; top: 100%; left: 0; z-index: 10; width: min(440px, 100%); margin: 6px 0 0; padding: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--muted); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.2); font-size: 14px; line-height: 1.5; }
+         .claims-details dt:hover + dd, .claims-details dt:focus + dd, .claims-details dd:hover { display: block; }
+        .token-status time, .token-status output { font-weight: 600; }
+        .company-brand { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-weight: 600; }
+        .company-brand img { width: 34px; height: 34px; object-fit: contain; vertical-align: middle; }
+        .company-brand img { filter: brightness(0) invert(1); }
+        .cluster-name { color: var(--primary); font-weight: 700; white-space: nowrap; }
+        .site-footer { margin-top: 48px; padding: 20px 0; text-align: center; color: var(--muted); }
+      .code-toolbar {
+          margin-bottom: 2em;
+      }
+  </style>
+</head>
+    <body>
+        <nav role="navigation">
+            <div class="nav-wrapper container"><a id="logo-container" href="#" class="brand-logo company-brand">{{ if .CompanyLogo }}<img src="{{ .CompanyLogo }}" alt="{{ .CompanyName }}">{{ end }}<span>{{ .CompanyName }}</span></a>
+            <ul class="right hide-on-med-and-down">
+                <li class="theme-toggle-item"><button class="language-button" type="button" data-language-toggle aria-label="Сменить язык">EN</button><button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему">☾ Тёмная тема</button></li>
+                <li><a href="{{ .HTTPPath }}/logout"><span data-lang="ru">Выйти</span><span data-lang="en">Log out</span></a></li>
+            </ul>
+
+            <ul id="nav-mobile" class="side-nav">
+                <li><a href="#">JWT-токен</a></li>
+            </ul>
+            <a href="#" data-activates="nav-mobile" class="button-collapse"><i class="material-icons">menu</i></a>
+            </div>
+        </nav>
+        <div class="container">
+            <h4 class="header center darken-3">
+                <span data-i18n="welcome">Добро пожаловать</span>, {{ .Username }}!
+            </h4>
+             <section class="token-status" aria-label="ID token">
+               <div class="token-summary">
+                 <p><span data-lang="ru">Действителен до:</span><span data-lang="en">Expires:</span> <time id="token-expiry"></time></p>
+                 <p><span data-lang="ru">Осталось:</span><span data-lang="en">Remaining:</span> <output id="token-remaining"></output></p>
+               </div>
+               <details class="token-help">
+                 <summary><span data-lang="ru">Подробнее о сроке действия</span><span data-lang="en">More about token lifetime</span></summary>
+                 <p class="muted" data-lang="ru">Время указано в часовом поясе вашего устройства. kubectl и Lens с поддержкой OIDC могут автоматически получить новый ID token через refresh token. Повторно войдите, если обновление токена отклонено или клиент сообщает об истечении сессии. Срок действия refresh token из ID token определить нельзя.</p>
+                 <p class="muted" data-lang="en">Times use your device's time zone. OIDC-enabled kubectl and Lens clients can automatically obtain a new ID token using the refresh token. Sign in again if refresh is rejected or the client reports an expired session. The refresh token lifetime cannot be determined from the ID token.</p>
+                 <a href="{{ .HTTPPath }}/login"><span data-lang="ru">Войти повторно</span><span data-lang="en">Sign in again</span></a>
+               </details>
+             </section>
+             <details class="claims-details">
+             <summary>
+                 <span data-i18n="claims">Данные пользователя, полученные от провайдера идентификации:</span>
+             </summary>
+             <dl>
+               <dt>iss / aud</dt><dd><span data-lang="ru">Кто выдал токен / для какого клиента он выпущен. API server проверяет оба значения.</span><span data-lang="en">Token issuer / intended audience. The API server validates both.</span></dd>
+               <dt>sub</dt><dd><span data-lang="ru">Уникальный идентификатор пользователя у провайдера; это не обязательно логин.</span><span data-lang="en">Unique user identifier at the provider; not necessarily a login name.</span></dd>
+               <dt>email / email_verified / name</dt><dd><span data-lang="ru">Почта, признак её подтверждения и отображаемое имя. В этом кластере email используется как имя пользователя Kubernetes.</span><span data-lang="en">Email, verification flag and display name. This cluster uses email as the Kubernetes username.</span></dd>
+               <dt>groups</dt><dd><span data-lang="ru">Группы пользователя. Привязки RBAC определяют, какие права эти группы имеют в Kubernetes.</span><span data-lang="en">User groups. RBAC bindings determine their Kubernetes permissions.</span></dd>
+               <dt>iat / exp / auth_time</dt><dd><span data-lang="ru">Время выдачи, окончания действия и входа пользователя — секунды с 1 января 1970 UTC. Дата окончания показана выше в понятном виде.</span><span data-lang="en">Issued-at, expiration and authentication times in seconds since January 1, 1970 UTC. Expiration is displayed above in readable form.</span></dd>
+               <dt>jti / at_hash / c_hash</dt><dd><span data-lang="ru">Идентификатор токена и контрольные значения для проверки связи с access token и кодом авторизации. Вручную настраивать их не нужно.</span><span data-lang="en">Token identifier and hashes binding it to the access token and authorization code. No manual configuration is needed.</span></dd>
+             </dl>
+            <pre><code class="language-yaml">
+{{- range $key, $value := .Claims -}}
+    {{- if eq $key "groups" -}}
+        {{- printf "%s:\n" $key -}}
+        {{- range $groupName := $value -}}
+            {{- printf "- \"%s\"\n" $groupName -}}
+        {{- end -}}
+    {{- else -}}
+        {{- if eq (printf "%T" $value) "string" -}}
+            {{- printf "%s: \"%s\"\n" $key $value -}}
+        {{- else if eq (printf "%T" $value) "bool" -}}
+            {{- if eq $value true -}}
+                {{- printf "%s: true\n" $key -}}
+            {{- else -}}
+                {{- printf "%s: false\n" $key -}}
+            {{ end }}
+        {{- else if or (eq (printf "%T" $value) "float64") (eq (printf "%T" $value) "float32") -}}
+            {{- printf "%s: %f\n" $key $value -}}
+        {{- else -}}
+            {{- printf "%s: %d\n" $key $value -}}
+        {{- end -}}
+    {{- end -}}
+{{- end -}}
+             </code></pre>
+             </details>
+            <h5>
+                <span data-i18n="access">Для доступа к кластеру Kubernetes</span> <strong class="cluster-name">{{ .ClusterName }}</strong> <span data-i18n="fromCommandLine">через командную строку настройте OpenID Connect (OIDC) одним из способов ниже.</span>
+            </h5>
+            <br>
+            <p>
+                <span data-i18n="install">Установите kubectl: в Windows —</span> <code>winget install --exact --id Kubernetes.kubectl</code> <span data-i18n="newPowerShell">(после установки откройте новый PowerShell), в macOS —</span> <code>brew install kubectl</code>. <span data-i18n="forLinux">Для Linux:</span>
+            </p>
+           <pre>
+             <code class="language-bash">
+curl -fLO "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+             </code>
+           </pre>
+            <div class="row">
+                <div class="col s12 right-align"><a href="{{ .HTTPPath }}/kubeconf" class="btn-large waves-effect waves-light blue" data-i18n="download">Скачать kubeconfig</a></div>
+                <div class="col s12" data-i18n="selectOs">После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.</div>
+            </div>
+            <div class="os-tabs" role="tablist" aria-label="Операционная система">
+                <button class="os-tab active" type="button" data-os-tab="linux">Linux / macOS</button>
+                <button class="os-tab" type="button" data-os-tab="windows">Windows PowerShell</button>
+            </div>
+            <div class="os-panel active command-block" data-os-panel="linux">
+                <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-command" data-i18n="copy">Копировать</button></div>
+                <pre><code id="linux-command" class="language-bash">cat &lt;&lt;'EOF' &gt; "ca-{{ .ClusterName }}.pem"
+{{ .ClusterCA }}
+EOF
+kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs
+kubectl config set-credentials "{{ .KubeCfgUser }}" \
+  --auth-provider=oidc \
+  --auth-provider-arg='idp-issuer-url={{ .IssuerURL }}' \
+  --auth-provider-arg='client-id={{ .ClientID }}' \
+  --auth-provider-arg='client-secret={{ .ClientSecret }}' \
+  --auth-provider-arg='refresh-token={{ .RefreshToken }}' \
+  --auth-provider-arg='id-token={{ .IDToken }}'
+kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
+kubectl config use-context "{{ .ClusterName }}"
+rm "ca-{{ .ClusterName }}.pem"</code></pre>
+            </div>
+            <div class="os-panel command-block" data-os-panel="windows">
+                <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-command" data-i18n="copy">Копировать</button></div>
+                <pre><code id="windows-command" class="language-powershell">$ca = @'
+{{ .ClusterCA }}
+'@
+$caPath = Join-Path (Get-Location).Path "ca-{{ .ClusterName }}.pem"
+[IO.File]::WriteAllText($caPath, $ca, [Text.Encoding]::ASCII)
+kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs
+kubectl config set-credentials "{{ .KubeCfgUser }}" `
+  --auth-provider=oidc `
+  --auth-provider-arg="idp-issuer-url={{ .IssuerURL }}" `
+  --auth-provider-arg="client-id={{ .ClientID }}" `
+  --auth-provider-arg="client-secret={{ .ClientSecret }}" `
+  --auth-provider-arg="refresh-token={{ .RefreshToken }}" `
+  --auth-provider-arg="id-token={{ .IDToken }}"
+kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
+kubectl config use-context "{{ .ClusterName }}"
+Remove-Item "ca-{{ .ClusterName }}.pem"</code></pre>
+            </div>
+        </div>
+        <footer class="site-footer"><strong>{{ .ClusterName }}</strong></footer>
+         <script>
+          document.querySelectorAll('.claims-details dt').forEach(function (label, index) {
+            var tooltip = label.nextElementSibling;
+            label.tabIndex = 0;
+            tooltip.id = 'claim-help-' + index;
+            tooltip.setAttribute('role', 'tooltip');
+            label.setAttribute('aria-describedby', tooltip.id);
+            label.addEventListener('click', function () { label.focus(); });
+            label.addEventListener('keydown', function (event) { if (event.key === 'Escape') label.blur(); });
+          });
+          (function () {
+            var expiry = Number({{ index .Claims "exp" }});
+            function updateExpiry() {
+              var ru = document.documentElement.lang !== 'en';
+              var valid = Number.isFinite(expiry) && expiry > 0 && !isNaN(new Date(expiry * 1000).getTime());
+              var date = document.getElementById('token-expiry');
+              var remaining = document.getElementById('token-remaining');
+              if (!valid) { date.textContent = ru ? 'Неизвестно' : 'Unknown'; remaining.textContent = '—'; return; }
+              date.dateTime = new Date(expiry * 1000).toISOString();
+              date.textContent = new Date(expiry * 1000).toLocaleString(ru ? 'ru-RU' : 'en-GB', { timeZoneName: 'short' });
+              var seconds = Math.max(0, Math.floor(expiry - Date.now() / 1000));
+              remaining.textContent = seconds === 0 ? (ru ? 'ID token истёк — требуется обновление токена' : 'ID token expired — token refresh required') : Math.floor(seconds / 86400) + (ru ? ' д ' : 'd ') + Math.floor(seconds % 86400 / 3600) + (ru ? ' ч ' : 'h ') + Math.floor(seconds % 3600 / 60) + (ru ? ' мин ' : 'm ') + seconds % 60 + (ru ? ' с' : 's');
+            }
+            updateExpiry();
+            setInterval(updateExpiry, 1000);
+          }());
+          (function () {
+            var root = document.documentElement;
+            var saved = localStorage.getItem('gangway-theme');
+            var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            var button;
+             function apply(value) {
+               root.setAttribute('data-theme', value);
+               var en = root.lang === 'en';
+               if (button) {
+                 button.textContent = value === 'dark' ? (en ? '☀ Light theme' : '☀ Светлая тема') : (en ? '☾ Dark theme' : '☾ Тёмная тема');
+                 button.setAttribute('aria-label', en ? 'Change theme' : 'Сменить тему');
+               }
+             }
+             new MutationObserver(function () { apply(theme); }).observe(root, { attributes: true, attributeFilter: ['lang'] });
+            document.addEventListener('DOMContentLoaded', function () { button = document.querySelector('[data-theme-toggle]'); apply(theme); button.addEventListener('click', function () { theme = theme === 'dark' ? 'light' : 'dark'; localStorage.setItem('gangway-theme', theme); apply(theme); }); });
+            apply(theme);
+           }());
+           document.addEventListener('DOMContentLoaded', function () {
+             document.querySelectorAll('[data-os-tab]').forEach(function (tab) { tab.addEventListener('click', function () { document.querySelectorAll('[data-os-tab], [data-os-panel]').forEach(function (item) { item.classList.remove('active'); }); tab.classList.add('active'); document.querySelector('[data-os-panel="' + tab.dataset.osTab + '"]').classList.add('active'); }); });
+             document.querySelectorAll('[data-copy]').forEach(function (copyButton) { copyButton.addEventListener('click', function () { var code = document.getElementById(copyButton.dataset.copy); navigator.clipboard.writeText(code.textContent).then(function () { var old = copyButton.textContent; copyButton.textContent = language === 'ru' ? 'Скопировано' : 'Copied'; setTimeout(function () { copyButton.textContent = old; }, 1500); }); }); });
+             var langButton = document.querySelector('[data-language-toggle]');
+             var translations = { ru: { welcome: 'Добро пожаловать', claims: 'Данные пользователя, полученные от провайдера идентификации:', access: 'Для доступа к кластеру Kubernetes', fromCommandLine: 'через командную строку настройте OpenID Connect (OIDC) одним из способов ниже.', install: 'Установите kubectl: в Windows —', newPowerShell: '(после установки откройте новый PowerShell), в macOS —', forLinux: 'Для Linux:', download: 'Скачать kubeconfig', selectOs: 'После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.', copy: 'Копировать' }, en: { welcome: 'Welcome', claims: 'User information received from the identity provider:', access: 'To access the Kubernetes cluster', fromCommandLine: 'from the command line, configure OpenID Connect (OIDC) using one of the options below.', install: 'Install kubectl: on Windows —', newPowerShell: '(open a new PowerShell after installation), on macOS —', forLinux: 'For Linux:', download: 'Download kubeconfig', selectOs: 'After installing kubectl, select your operating system and copy the entire command block.', copy: 'Copy' } };
+             function applyLanguage(lang) { document.documentElement.lang = lang; Object.keys(translations[lang]).forEach(function (key) { document.querySelectorAll('[data-i18n="' + key + '"]').forEach(function (item) { item.textContent = translations[lang][key]; }); }); if (langButton) langButton.textContent = lang === 'ru' ? 'RU' : 'EN'; }
+             var language = localStorage.getItem('gangway-language') || 'ru'; applyLanguage(language);
+             if (langButton) langButton.addEventListener('click', function () { language = language === 'ru' ? 'en' : 'ru'; localStorage.setItem('gangway-language', language); applyLanguage(language); });
+           });
+        </script>
+    </body>
+</html>

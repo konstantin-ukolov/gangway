@@ -28,12 +28,15 @@ func TestConfigNotFound(t *testing.T) {
 
 func TestEnvionmentOverrides(t *testing.T) {
 	os.Setenv("GANGWAY_AUTHORIZE_URL", "https://foo.bar/authorize")
+	os.Setenv("GANGWAY_ISSUER_URL", "https://foo.bar")
 	os.Setenv("GANGWAY_APISERVER_URL", "https://k8s-api.foo.baz")
 	os.Setenv("GANGWAY_CLIENT_ID", "foo")
 	os.Setenv("GANGWAY_CLIENT_SECRET", "bar")
 	os.Setenv("GANGWAY_PORT", "1234")
 	os.Setenv("GANGWAY_REDIRECT_URL", "https://foo.baz/callback")
 	os.Setenv("GANGWAY_CLUSTER_CA_PATH", "/etc/ssl/certs/ca-certificates.crt")
+	os.Setenv("GANGWAY_CLUSTER_NAME", "test-cluster")
+	os.Setenv("GANGWAY_APP_NAME", "Kubernetes Login")
 	os.Setenv("GANGWAY_SESSION_SECURITY_KEY", "testing")
 	os.Setenv("GANGWAY_TOKEN_URL", "https://foo.bar/token")
 	os.Setenv("GANGWAY_AUDIENCE", "foo")
@@ -45,6 +48,12 @@ func TestEnvionmentOverrides(t *testing.T) {
 
 	if cfg.Port != 1234 {
 		t.Errorf("Failed to override config with environment")
+	}
+	if cfg.ClusterName != "test-cluster" {
+		t.Errorf("Failed to set cluster name via environment variable. Got %s", cfg.ClusterName)
+	}
+	if cfg.AppName != "Kubernetes Login" {
+		t.Errorf("Failed to set application name via environment variable. Got %s", cfg.AppName)
 	}
 
 	if cfg.Audience != "foo" {
