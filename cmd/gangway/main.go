@@ -36,14 +36,15 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var cfg *config.Config
-var oauth2Cfg *oauth2.Config
-var o2token oidc.OAuth2Token
-var serverSessionStore *session.MemoryStore
-
-var transportConfig *config.TransportConfig
-var oidcVerifier *coreosoidc.IDTokenVerifier
-var verifyIDToken func(context.Context, string) (map[string]interface{}, error)
+type App struct {
+	Config        *config.Config
+	OAuth2Config  *oauth2.Config
+	Token         oidc.OAuth2Token
+	Sessions      *session.MemoryStore
+	Transport     *config.TransportConfig
+	OIDCVerifier  *coreosoidc.IDTokenVerifier
+	VerifyIDToken func(context.Context, string) (map[string]interface{}, error)
+}
 
 //go:embed templates/*
 var templateFS embed.FS
@@ -67,13 +68,13 @@ func main() {
 	flag.Parse()
 
 	var err error
-	cfg, err = config.NewConfig(*cfgFile)
+	cfg, err := config.NewConfig(*cfgFile)
 	if err != nil {
 		log.Errorf("Could not parse config file: %s", err)
 		os.Exit(1)
 	}
 
-	oauth2Cfg = &oauth2.Config{
+	oauth2Cfg := &oauth2.Config{
 		ClientID:     cfg.ClientID,
 		ClientSecret: cfg.ClientSecret,
 		RedirectURL:  cfg.RedirectURL,
@@ -84,19 +85,19 @@ func main() {
 		},
 	}
 
-	o2token = &oidc.Token{
+	o2token := &oidc.Token{
 		OAuth2Cfg: oauth2Cfg,
 	}
 
-	transportConfig = config.NewTransportConfig(cfg.TrustedCAPath)
+	transportConfig := config.NewTransportConfig(cfg.TrustedCAPath)
 	providerContext := context.WithValue(context.Background(), oauth2.HTTPClient, transportConfig.HTTPClient)
 	provider, err := coreosoidc.NewProvider(providerContext, cfg.IssuerURL)
 	if err != nil {
 		log.Errorf("Could not initialize OIDC provider: %s", err)
 		os.Exit(1)
 	}
-	oidcVerifier = provider.Verifier(&coreosoidc.Config{ClientID: cfg.ClientID})
-	verifyIDToken = func(ctx context.Context, raw string) (map[string]interface{}, error) {
+	oidcVerifier := provider.Verifier(&coreosoidc.Config{ClientID: cfg.ClientID})
+	verifyIDToken := func(ctx context.Context, raw string) (map[string]interface{}, error) {
 		token, err := oidcVerifier.Verify(ctx, raw)
 		if err != nil {
 			return nil, err
@@ -109,16 +110,17 @@ func main() {
 	}
 	// OIDC tokens are kept in process memory; the browser receives only an
 	// opaque session ID. This deployment intentionally runs one replica.
-	serverSessionStore = session.NewMemoryStore(time.Duration(cfg.SessionTTLHours)*time.Hour, cfg.SessionMaxCount)
+	serverSessionStore := session.NewMemoryStore(time.Duration(cfg.SessionTTLHours)*time.Hour, cfg.SessionMaxCount)
+	app := &App{Config: cfg, OAuth2Config: oauth2Cfg, Token: o2token, Sessions: serverSessionStore, Transport: transportConfig, OIDCVerifier: oidcVerifier, VerifyIDToken: verifyIDToken}
 	cleanupStop := make(chan struct{})
 	defer close(cleanupStop)
-	serverSessionStore.StartCleanup(time.Minute, cleanupStop)
+	app.Sessions.StartCleanup(time.Minute, cleanupStop)
 
-	loginRequiredHandlers := alice.New(loginRequired)
+	loginRequiredHandlers := alice.New(app.loginRequired)
 
-	http.HandleFunc(cfg.GetRootPathPrefix(), httpLogger(homeHandler))
-	http.HandleFunc(fmt.Sprintf("%s/login", cfg.HTTPPath), httpLogger(loginHandler))
-	http.HandleFunc(fmt.Sprintf("%s/callback", cfg.HTTPPath), httpLogger(callbackHandler))
+	http.HandleFunc(cfg.GetRootPathPrefix(), httpLogger(app.homeHandler))
+	http.HandleFunc(fmt.Sprintf("%s/login", cfg.HTTPPath), httpLogger(app.loginHandler))
+	http.HandleFunc(fmt.Sprintf("%s/callback", cfg.HTTPPath), httpLogger(app.callbackHandler))
 	http.HandleFunc(fmt.Sprintf("%s/assets/layered-logo.svg", cfg.HTTPPath), func(w http.ResponseWriter, r *http.Request) {
 		logo, err := templateFS.ReadFile("templates/layered-logo.svg")
 		if err != nil {
@@ -141,7 +143,7 @@ func main() {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	http.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if serverSessionStore == nil {
+		if app.Sessions == nil {
 			http.Error(w, "not ready", http.StatusServiceUnavailable)
 			return
 		}
@@ -150,9 +152,9 @@ func main() {
 	})
 
 	// middleware'd routes
-	http.Handle(fmt.Sprintf("%s/logout", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(logoutHandler))
-	http.Handle(fmt.Sprintf("%s/commandline", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(commandlineHandler))
-	http.Handle(fmt.Sprintf("%s/kubeconf", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(kubeConfigHandler))
+	http.Handle(fmt.Sprintf("%s/logout", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.logoutHandler))
+	http.Handle(fmt.Sprintf("%s/commandline", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.commandlineHandler))
+	http.Handle(fmt.Sprintf("%s/kubeconf", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.kubeConfigHandler))
 
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	// create http server with timeouts

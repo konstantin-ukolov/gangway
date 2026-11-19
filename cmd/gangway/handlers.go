@@ -41,10 +41,10 @@ const (
 	serverSessionCookie = "gangway_session"
 )
 
-func setServerSessionCookie(w http.ResponseWriter, id string) {
+func (a *App) setServerSessionCookie(w http.ResponseWriter, id string) {
 	maxAge := 8 * time.Hour
-	if cfg != nil && cfg.SessionTTLHours > 0 {
-		maxAge = time.Duration(cfg.SessionTTLHours) * time.Hour
+	if a != nil && a.Config != nil && a.Config.SessionTTLHours > 0 {
+		maxAge = time.Duration(a.Config.SessionTTLHours) * time.Hour
 	}
 	http.SetCookie(w, &http.Cookie{Name: serverSessionCookie, Value: id, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(maxAge.Seconds())})
 }
@@ -53,15 +53,15 @@ func clearServerSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: serverSessionCookie, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }
 
-func serverSession(r *http.Request) (string, session.ServerSession, bool) {
-	if serverSessionStore == nil {
+func (a *App) serverSession(r *http.Request) (string, session.ServerSession, bool) {
+	if a.Sessions == nil {
 		return "", session.ServerSession{}, false
 	}
 	cookie, err := r.Cookie(serverSessionCookie)
 	if err != nil {
 		return "", session.ServerSession{}, false
 	}
-	value, ok := serverSessionStore.Get(cookie.Value)
+	value, ok := a.Sessions.Get(cookie.Value)
 	return cookie.Value, value, ok
 }
 
@@ -103,7 +103,7 @@ type homeInfo struct {
 	CompanyLogo string
 }
 
-func serveTemplate(tmplFile string, data interface{}, w http.ResponseWriter) {
+func (a *App) serveTemplate(tmplFile string, data interface{}, w http.ResponseWriter) {
 	var (
 		templatePath string
 		templateData []byte
@@ -111,8 +111,8 @@ func serveTemplate(tmplFile string, data interface{}, w http.ResponseWriter) {
 	)
 
 	// Use custom templates if provided
-	if cfg.CustomHTMLTemplatesDir != "" {
-		templatePath = filepath.Join(cfg.CustomHTMLTemplatesDir, tmplFile)
+	if a.Config.CustomHTMLTemplatesDir != "" {
+		templatePath = filepath.Join(a.Config.CustomHTMLTemplatesDir, tmplFile)
 		templateData, err = ioutil.ReadFile(templatePath)
 	} else {
 		templatePath = filepath.Join(templatesBase, tmplFile)
@@ -180,11 +180,11 @@ func generateKubeConfig(cfg *userInfo) clientcmdapi.Config {
 	return kcfg
 }
 
-func loginRequired(next http.Handler) http.Handler {
+func (a *App) loginRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, current, ok := serverSession(r)
+		_, current, ok := a.serverSession(r)
 		if !ok || current.IDToken == "" {
-			http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
+			http.Redirect(w, r, a.Config.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -192,19 +192,19 @@ func loginRequired(next http.Handler) http.Handler {
 	})
 }
 
-func homeHandler(w http.ResponseWriter, r *http.Request) {
+func (a *App) homeHandler(w http.ResponseWriter, r *http.Request) {
 	data := &homeInfo{
-		HTTPPath:    cfg.HTTPPath,
-		AppName:     cfg.AppName,
-		ClusterName: cfg.ClusterName,
-		CompanyName: cfg.CompanyName,
-		CompanyLogo: cfg.CompanyLogo,
+		HTTPPath:    a.Config.HTTPPath,
+		AppName:     a.Config.AppName,
+		ClusterName: a.Config.ClusterName,
+		CompanyName: a.Config.CompanyName,
+		CompanyLogo: a.Config.CompanyLogo,
 	}
 
-	serveTemplate("home.tmpl", data, w)
+	a.serveTemplate("home.tmpl", data, w)
 }
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
+func (a *App) loginHandler(w http.ResponseWriter, r *http.Request) {
 
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -217,36 +217,36 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not generate session token", http.StatusInternalServerError)
 		return
 	}
-	id, err := serverSessionStore.Create()
+	id, err := a.Sessions.Create()
 	if err != nil {
 		http.Error(w, "Could not create session", http.StatusInternalServerError)
 		return
 	}
-	if err := serverSessionStore.Save(id, session.ServerSession{State: state, StateExpiresAt: time.Now().Add(time.Duration(cfg.OAuthStateTTLMinutes) * time.Minute), LogoutCSRF: logoutCSRF}); err != nil {
+	if err := a.Sessions.Save(id, session.ServerSession{State: state, StateExpiresAt: time.Now().Add(time.Duration(a.Config.OAuthStateTTLMinutes) * time.Minute), LogoutCSRF: logoutCSRF}); err != nil {
 		http.Error(w, "Could not save session", http.StatusInternalServerError)
 		return
 	}
-	setServerSessionCookie(w, id)
-	audience := oauth2.SetAuthURLParam("audience", cfg.Audience)
-	http.Redirect(w, r, oauth2Cfg.AuthCodeURL(state, audience), http.StatusTemporaryRedirect)
+	a.setServerSessionCookie(w, id)
+	audience := oauth2.SetAuthURLParam("audience", a.Config.Audience)
+	http.Redirect(w, r, a.OAuth2Config.AuthCodeURL(state, audience), http.StatusTemporaryRedirect)
 }
 
-func logoutHandler(w http.ResponseWriter, r *http.Request) {
+func (a *App) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	id, current, ok := serverSession(r)
+	id, current, ok := a.serverSession(r)
 	if !ok || current.LogoutCSRF == "" || subtle.ConstantTimeCompare([]byte(r.FormValue("csrf_token")), []byte(current.LogoutCSRF)) != 1 {
 		http.Error(w, "invalid CSRF token", http.StatusForbidden)
 		return
 	}
-	serverSessionStore.Delete(id)
+	a.Sessions.Delete(id)
 	clearServerSessionCookie(w)
-	http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
+	http.Redirect(w, r, a.Config.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 }
 
-func callbackHandler(w http.ResponseWriter, r *http.Request) {
+func (a *App) callbackHandler(w http.ResponseWriter, r *http.Request) {
 	if oauthError := r.URL.Query().Get("error"); oauthError != "" {
 		log.Warnf("OIDC authorization failed: %s", oauthError)
 		http.Error(w, "OIDC authorization failed", http.StatusUnauthorized)
@@ -258,18 +258,18 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	{
-		id, current, ok := serverSession(r)
+		id, current, ok := a.serverSession(r)
 		if !ok || current.State == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("state")), []byte(current.State)) != 1 {
 			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 			return
 		}
 		current.State = ""
-		if err := serverSessionStore.Save(id, current); err != nil {
+		if err := a.Sessions.Save(id, current); err != nil {
 			http.Error(w, "Could not save OAuth session", http.StatusInternalServerError)
 			return
 		}
-		ctx := context.WithValue(r.Context(), oauth2.HTTPClient, transportConfig.HTTPClient)
-		token, err := o2token.Exchange(ctx, code)
+		ctx := context.WithValue(r.Context(), oauth2.HTTPClient, a.Transport.HTTPClient)
+		token, err := a.Token.Exchange(ctx, code)
 		if err != nil {
 			http.Error(w, "Could not exchange authorization code", http.StatusInternalServerError)
 			return
@@ -281,28 +281,28 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		current.IDToken = idToken
 		current.RefreshToken = token.RefreshToken
-		if err := serverSessionStore.Save(id, current); err != nil {
+		if err := a.Sessions.Save(id, current); err != nil {
 			http.Error(w, "Could not save OAuth session", http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, fmt.Sprintf("%s/commandline", cfg.HTTPPath), http.StatusSeeOther)
+		http.Redirect(w, r, fmt.Sprintf("%s/commandline", a.Config.HTTPPath), http.StatusSeeOther)
 		return
 	}
 }
 
-func commandlineHandler(w http.ResponseWriter, r *http.Request) {
-	info := generateInfo(w, r)
+func (a *App) commandlineHandler(w http.ResponseWriter, r *http.Request) {
+	info := a.generateInfo(w, r)
 	if info == nil {
 		// generateInfo writes to the ResponseWriter if it encounters an error.
 		// TODO(abrand): Refactor this.
 		return
 	}
 
-	serveTemplate("commandline.tmpl", info, w)
+	a.serveTemplate("commandline.tmpl", info, w)
 }
 
-func kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
-	info := generateInfo(w, r)
+func (a *App) kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
+	info := a.generateInfo(w, r)
 	if info == nil {
 		// generateInfo writes to the ResponseWriter if it encounters an error.
 		// TODO(abrand): Refactor this.
@@ -325,9 +325,9 @@ func kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(d)
 }
 
-func generateInfo(w http.ResponseWriter, r *http.Request) *userInfo {
+func (a *App) generateInfo(w http.ResponseWriter, r *http.Request) *userInfo {
 	// read in public ca.crt to output in commandline copy/paste commands
-	file, err := os.Open(cfg.ClusterCAPath)
+	file, err := os.Open(a.Config.ClusterCAPath)
 	if err != nil {
 		// let us know that we couldn't open the file. This only cause missing output
 		// does not impact actual function of program
@@ -342,37 +342,37 @@ func generateInfo(w http.ResponseWriter, r *http.Request) *userInfo {
 		}
 	}
 
-	_, current, ok := serverSession(r)
+	_, current, ok := a.serverSession(r)
 	if !ok || current.IDToken == "" || current.RefreshToken == "" {
 		clearServerSessionCookie(w)
-		http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
+		http.Redirect(w, r, a.Config.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 		return nil
 	}
-	return generateInfoFromTokens(w, r, current.IDToken, current.RefreshToken, caBytes)
+	return a.generateInfoFromTokens(w, r, current.IDToken, current.RefreshToken, caBytes)
 }
 
-func generateInfoFromTokens(w http.ResponseWriter, r *http.Request, idToken, refreshToken string, caBytes []byte) *userInfo {
-	if verifyIDToken == nil {
+func (a *App) generateInfoFromTokens(w http.ResponseWriter, r *http.Request, idToken, refreshToken string, caBytes []byte) *userInfo {
+	if a.VerifyIDToken == nil {
 		http.Error(w, "OIDC verifier is not initialized", http.StatusInternalServerError)
 		return nil
 	}
-	claims, err := verifyIDToken(r.Context(), idToken)
+	claims, err := a.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
 		log.Warnf("OIDC token verification failed: %v", err)
 		http.Error(w, "Could not verify OIDC token", http.StatusUnauthorized)
 		return nil
 	}
-	username, ok := claims[cfg.UsernameClaim].(string)
+	username, ok := claims[a.Config.UsernameClaim].(string)
 	if !ok {
 		http.Error(w, "Could not parse Username claim", http.StatusInternalServerError)
 		return nil
 	}
-	_, current, _ := serverSession(r)
+	_, current, _ := a.serverSession(r)
 	visibleClaims := make(map[string]interface{})
 	for _, name := range []string{"iss", "aud", "sub", "email", "email_verified", "name", "groups", "iat", "exp", "auth_time", "jti", "at_hash", "c_hash"} {
 		if value, exists := claims[name]; exists {
 			visibleClaims[name] = value
 		}
 	}
-	return &userInfo{ClusterName: cfg.ClusterName, AppName: cfg.AppName, CompanyName: cfg.CompanyName, CompanyLogo: cfg.CompanyLogo, Username: username, Claims: visibleClaims, KubeCfgUser: strings.Join([]string{username, cfg.ClusterName}, "@"), IDToken: idToken, RefreshToken: refreshToken, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, IssuerURL: cfg.IssuerURL, APIServerURL: cfg.APIServerURL, ClusterCA: string(caBytes), HTTPPath: cfg.HTTPPath, RedirectURL: cfg.RedirectURL, LogoutCSRF: current.LogoutCSRF}
+	return &userInfo{ClusterName: a.Config.ClusterName, AppName: a.Config.AppName, CompanyName: a.Config.CompanyName, CompanyLogo: a.Config.CompanyLogo, Username: username, Claims: visibleClaims, KubeCfgUser: strings.Join([]string{username, a.Config.ClusterName}, "@"), IDToken: idToken, RefreshToken: refreshToken, ClientID: a.Config.ClientID, ClientSecret: a.Config.ClientSecret, IssuerURL: a.Config.IssuerURL, APIServerURL: a.Config.APIServerURL, ClusterCA: string(caBytes), HTTPPath: a.Config.HTTPPath, RedirectURL: a.Config.RedirectURL, LogoutCSRF: current.LogoutCSRF}
 }
