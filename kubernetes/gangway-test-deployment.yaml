@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gangway-test
+  namespace: dex
+  labels:
+    app.kubernetes.io/name: gangway-test
+    app.kubernetes.io/part-of: kubernetes-oidc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gangway-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gangway-test
+    spec:
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gangway
+          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v11
+          imagePullPolicy: Always
+          args: ["-config", "/etc/gangway/gangway.yaml"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: GANGWAY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: gangway-secrets
+                  key: clientSecret
+            - name: GANGWAY_SESSION_SECURITY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gangway-secrets
+                  key: sessionSecurityKey
+          volumeMounts:
+            - name: config
+              mountPath: /etc/gangway
+              readOnly: true
+            - name: trusted-ca
+              mountPath: /etc/gangway/ca
+              readOnly: true
+            - name: cluster-ca
+              mountPath: /etc/gangway/cluster-ca
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: gangway-test
+        - name: trusted-ca
+          secret:
+            secretName: gangway-secrets
+            items:
+              - key: ca.crt
+                path: ca.crt
+        - name: cluster-ca
+          secret:
+            secretName: gangway-secrets
+            items:
+              - key: cluster-ca.crt
+                path: ca.crt
+        - name: tmp
+          emptyDir: {}

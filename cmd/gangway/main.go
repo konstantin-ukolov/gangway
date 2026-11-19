@@ -18,6 +18,7 @@ import (
 	"context"
 	"crypto/tls"
 	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -38,7 +39,8 @@ import (
 var cfg *config.Config
 var oauth2Cfg *oauth2.Config
 var o2token oidc.OAuth2Token
-var gangwayUserSession *session.Session
+var serverSessionStore *session.MemoryStore
+
 var transportConfig *config.TransportConfig
 var oidcVerifier *coreosoidc.IDTokenVerifier
 var verifyIDToken func(context.Context, string) (map[string]interface{}, error)
@@ -52,6 +54,9 @@ func httpLogger(fn http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		defer log.Printf("%s %s %s", r.Method, r.URL.Path, r.RemoteAddr)
 		fn(w, r)
 	}
@@ -102,7 +107,12 @@ func main() {
 		}
 		return claims, nil
 	}
-	gangwayUserSession = session.New(cfg.SessionSecurityKey)
+	// OIDC tokens are kept in process memory; the browser receives only an
+	// opaque session ID. This deployment intentionally runs one replica.
+	serverSessionStore = session.NewMemoryStore(time.Duration(cfg.SessionTTLHours)*time.Hour, cfg.SessionMaxCount)
+	cleanupStop := make(chan struct{})
+	defer close(cleanupStop)
+	serverSessionStore.StartCleanup(time.Minute, cleanupStop)
 
 	loginRequiredHandlers := alice.New(loginRequired)
 
@@ -123,6 +133,18 @@ func main() {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	http.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok\n"))
+	})
+	http.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		if serverSessionStore == nil {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
 	})
@@ -161,27 +183,42 @@ func main() {
 	}
 
 	// start up the http server
+	serverErr := make(chan error, 1)
 	go func() {
 		log.Infof("Gangway started! Listening on: %s", bindAddr)
 
 		// exit with FATAL logging why we could not start
 		// example: FATA[0000] listen tcp 0.0.0.0:8080: bind: address already in use
 		if cfg.ServeTLS {
-			log.Fatal(httpServer.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile))
+			serverErr <- httpServer.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
 		} else {
-			log.Fatal(httpServer.ListenAndServe())
+			serverErr <- httpServer.ListenAndServe()
 		}
 	}()
 
 	// create channel listening for signals so we can have graceful shutdowns
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-	<-signalChan
+	select {
+	case <-signalChan:
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("HTTP server failed: %s", err)
+		}
+		return
+	}
 
 	log.Println("Shutdown signal received, exiting.")
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownContext); err != nil {
 		log.Errorf("HTTP server shutdown failed: %s", err)
+	}
+	select {
+	case err := <-serverErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Errorf("HTTP server failed during shutdown: %s", err)
+		}
+	default:
 	}
 }

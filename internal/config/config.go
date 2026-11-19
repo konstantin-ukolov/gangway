@@ -53,6 +53,9 @@ type Config struct {
 	HTTPPath               string   `yaml:"httpPath" envconfig:"http_path"`
 
 	SessionSecurityKey     string `yaml:"sessionSecurityKey" envconfig:"SESSION_SECURITY_KEY"`
+	SessionTTLHours        int    `yaml:"sessionTTLHours" envconfig:"SESSION_TTL_HOURS"`
+	SessionMaxCount        int    `yaml:"sessionMaxCount" envconfig:"SESSION_MAX_COUNT"`
+	OAuthStateTTLMinutes   int    `yaml:"oauthStateTTLMinutes" envconfig:"OAUTH_STATE_TTL_MINUTES"`
 	CustomHTMLTemplatesDir string `yaml:"customHTMLTemplatesDir" envconfig:"custom_http_templates_dir"`
 }
 
@@ -74,6 +77,9 @@ func NewConfig(configFile string) (*Config, error) {
 		KeyFile:                "/etc/gangway/tls/tls.key",
 		ClusterCAPath:          "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
 		HTTPPath:               "",
+		SessionTTLHours:        8,
+		SessionMaxCount:        10000,
+		OAuthStateTTLMinutes:   10,
 	}
 
 	if configFile != "" {
@@ -120,6 +126,9 @@ func (cfg *Config) Validate() error {
 		{cfg.RedirectURL == "", "no redirectURL specified"},
 		{cfg.SessionSecurityKey == "", "no SessionSecurityKey specified"},
 		{cfg.APIServerURL == "", "no apiServerURL specified"},
+		{cfg.SessionTTLHours <= 0, "sessionTTLHours must be positive"},
+		{cfg.SessionMaxCount <= 0, "sessionMaxCount must be positive"},
+		{cfg.OAuthStateTTLMinutes <= 0, "oauthStateTTLMinutes must be positive"},
 	}
 
 	for _, check := range checks {

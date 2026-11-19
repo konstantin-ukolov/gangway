@@ -27,7 +27,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/heptiolabs/gangway/internal/session"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api/v1"
@@ -35,8 +37,33 @@ import (
 )
 
 const (
-	templatesBase = "/templates"
+	templatesBase       = "/templates"
+	serverSessionCookie = "gangway_session"
 )
+
+func setServerSessionCookie(w http.ResponseWriter, id string) {
+	maxAge := 8 * time.Hour
+	if cfg != nil && cfg.SessionTTLHours > 0 {
+		maxAge = time.Duration(cfg.SessionTTLHours) * time.Hour
+	}
+	http.SetCookie(w, &http.Cookie{Name: serverSessionCookie, Value: id, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(maxAge.Seconds())})
+}
+
+func clearServerSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: serverSessionCookie, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+}
+
+func serverSession(r *http.Request) (string, session.ServerSession, bool) {
+	if serverSessionStore == nil {
+		return "", session.ServerSession{}, false
+	}
+	cookie, err := r.Cookie(serverSessionCookie)
+	if err != nil {
+		return "", session.ServerSession{}, false
+	}
+	value, ok := serverSessionStore.Get(cookie.Value)
+	return cookie.Value, value, ok
+}
 
 // userInfo stores information about an authenticated user
 type userInfo struct {
@@ -55,6 +82,16 @@ type userInfo struct {
 	APIServerURL string
 	ClusterCA    string
 	HTTPPath     string
+	RedirectURL  string
+	LogoutCSRF   string
+}
+
+func randomToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // homeInfo is used to store dynamic properties on
@@ -84,15 +121,16 @@ func serveTemplate(tmplFile string, data interface{}, w http.ResponseWriter) {
 
 	if err != nil {
 		log.Errorf("Failed to find template asset: %s at path: %s", tmplFile, templatePath)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Unable to render page", http.StatusInternalServerError)
 		return
 	}
 
-	tmpl := htmltemplate.New(tmplFile)
+	tmpl := htmltemplate.New(tmplFile).Funcs(htmltemplate.FuncMap{"trimSuffix": strings.TrimSuffix})
 	tmpl, err = tmpl.Parse(string(templateData))
 	if err != nil {
 		log.Errorf("Failed to parse template: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Unable to render page", http.StatusInternalServerError)
+		return
 	}
 	tmpl.ExecuteTemplate(w, tmplFile, data)
 }
@@ -144,13 +182,8 @@ func generateKubeConfig(cfg *userInfo) clientcmdapi.Config {
 
 func loginRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, err := gangwayUserSession.Session.Get(r, "gangway_id_token")
-		if err != nil {
-			http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
-			return
-		}
-
-		if session.Values["id_token"] == nil {
+		_, current, ok := serverSession(r)
+		if !ok || current.IDToken == "" {
 			http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 			return
 		}
@@ -179,31 +212,37 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := url.QueryEscape(base64.StdEncoding.EncodeToString(b))
-
-	session, err := gangwayUserSession.Session.Get(r, "gangway")
+	logoutCSRF, err := randomToken()
 	if err != nil {
-		log.Errorf("Got an error in login: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Could not generate session token", http.StatusInternalServerError)
 		return
 	}
-
-	session.Values["state"] = state
-	err = session.Save(r, w)
+	id, err := serverSessionStore.Create()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Could not create session", http.StatusInternalServerError)
 		return
 	}
-
+	if err := serverSessionStore.Save(id, session.ServerSession{State: state, StateExpiresAt: time.Now().Add(time.Duration(cfg.OAuthStateTTLMinutes) * time.Minute), LogoutCSRF: logoutCSRF}); err != nil {
+		http.Error(w, "Could not save session", http.StatusInternalServerError)
+		return
+	}
+	setServerSessionCookie(w, id)
 	audience := oauth2.SetAuthURLParam("audience", cfg.Audience)
-	url := oauth2Cfg.AuthCodeURL(state, audience)
-
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, oauth2Cfg.AuthCodeURL(state, audience), http.StatusTemporaryRedirect)
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
-	gangwayUserSession.Cleanup(w, r, "gangway")
-	gangwayUserSession.Cleanup(w, r, "gangway_id_token")
-	gangwayUserSession.Cleanup(w, r, "gangway_refresh_token")
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id, current, ok := serverSession(r)
+	if !ok || current.LogoutCSRF == "" || subtle.ConstantTimeCompare([]byte(r.FormValue("csrf_token")), []byte(current.LogoutCSRF)) != 1 {
+		http.Error(w, "invalid CSRF token", http.StatusForbidden)
+		return
+	}
+	serverSessionStore.Delete(id)
+	clearServerSessionCookie(w)
 	http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 }
 
@@ -218,76 +257,37 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing authorization code", http.StatusBadRequest)
 		return
 	}
-	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, transportConfig.HTTPClient)
-
-	// load up session cookies
-	session, err := gangwayUserSession.Session.Get(r, "gangway")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	{
+		id, current, ok := serverSession(r)
+		if !ok || current.State == "" || subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("state")), []byte(current.State)) != 1 {
+			http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+			return
+		}
+		current.State = ""
+		if err := serverSessionStore.Save(id, current); err != nil {
+			http.Error(w, "Could not save OAuth session", http.StatusInternalServerError)
+			return
+		}
+		ctx := context.WithValue(r.Context(), oauth2.HTTPClient, transportConfig.HTTPClient)
+		token, err := o2token.Exchange(ctx, code)
+		if err != nil {
+			http.Error(w, "Could not exchange authorization code", http.StatusInternalServerError)
+			return
+		}
+		idToken, ok := token.Extra("id_token").(string)
+		if !ok || idToken == "" {
+			http.Error(w, "OIDC provider did not return an ID token", http.StatusUnauthorized)
+			return
+		}
+		current.IDToken = idToken
+		current.RefreshToken = token.RefreshToken
+		if err := serverSessionStore.Save(id, current); err != nil {
+			http.Error(w, "Could not save OAuth session", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("%s/commandline", cfg.HTTPPath), http.StatusSeeOther)
 		return
 	}
-
-	sessionIDToken, err := gangwayUserSession.Session.Get(r, "gangway_id_token")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	sessionRefreshToken, err := gangwayUserSession.Session.Get(r, "gangway_refresh_token")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// verify the state string
-	state := r.URL.Query().Get("state")
-
-	expectedState, ok := session.Values["state"].(string)
-	if !ok || subtle.ConstantTimeCompare([]byte(state), []byte(expectedState)) != 1 {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
-		return
-	}
-	delete(session.Values, "state")
-	// Persist state consumption before exchanging the code. This prevents a
-	// second callback from replaying the same state while the provider is slow.
-	if err := session.Save(r, w); err != nil {
-		http.Error(w, "Could not save OAuth session", http.StatusInternalServerError)
-		return
-	}
-
-	// use the access code to retrieve a token
-	token, err := o2token.Exchange(ctx, code)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	idToken, ok := token.Extra("id_token").(string)
-	if !ok || idToken == "" {
-		http.Error(w, "OIDC provider did not return an ID token", http.StatusUnauthorized)
-		return
-	}
-	sessionIDToken.Values["id_token"] = idToken
-	sessionRefreshToken.Values["refresh_token"] = token.RefreshToken
-
-	// save the session cookies
-	err = session.Save(r, w)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	err = sessionIDToken.Save(r, w)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	err = sessionRefreshToken.Save(r, w)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, fmt.Sprintf("%s/commandline", cfg.HTTPPath), http.StatusSeeOther)
 }
 
 func commandlineHandler(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +320,8 @@ func kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="kubeconfig.yaml"`)
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'")
 	w.Write(d)
 }
 
@@ -340,38 +342,16 @@ func generateInfo(w http.ResponseWriter, r *http.Request) *userInfo {
 		}
 	}
 
-	// load the session cookies
-	sessionIDToken, err := gangwayUserSession.Session.Get(r, "gangway_id_token")
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	_, current, ok := serverSession(r)
+	if !ok || current.IDToken == "" || current.RefreshToken == "" {
+		clearServerSessionCookie(w)
+		http.Redirect(w, r, cfg.GetRootPathPrefix(), http.StatusTemporaryRedirect)
 		return nil
 	}
-	sessionRefreshToken, err := gangwayUserSession.Session.Get(r, "gangway_refresh_token")
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return nil
-	}
+	return generateInfoFromTokens(w, r, current.IDToken, current.RefreshToken, caBytes)
+}
 
-	idToken, ok := sessionIDToken.Values["id_token"].(string)
-	if !ok {
-		gangwayUserSession.Cleanup(w, r, "gangway")
-		gangwayUserSession.Cleanup(w, r, "gangway_id_token")
-		gangwayUserSession.Cleanup(w, r, "gangway_refresh_token")
-
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		return nil
-	}
-
-	refreshToken, ok := sessionRefreshToken.Values["refresh_token"].(string)
-	if !ok {
-		gangwayUserSession.Cleanup(w, r, "gangway")
-		gangwayUserSession.Cleanup(w, r, "gangway_id_token")
-		gangwayUserSession.Cleanup(w, r, "gangway_refresh_token")
-
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-		return nil
-	}
-
+func generateInfoFromTokens(w http.ResponseWriter, r *http.Request, idToken, refreshToken string, caBytes []byte) *userInfo {
 	if verifyIDToken == nil {
 		http.Error(w, "OIDC verifier is not initialized", http.StatusInternalServerError)
 		return nil
@@ -382,35 +362,17 @@ func generateInfo(w http.ResponseWriter, r *http.Request) *userInfo {
 		http.Error(w, "Could not verify OIDC token", http.StatusUnauthorized)
 		return nil
 	}
-
 	username, ok := claims[cfg.UsernameClaim].(string)
 	if !ok {
 		http.Error(w, "Could not parse Username claim", http.StatusInternalServerError)
 		return nil
 	}
-
-	kubeCfgUser := strings.Join([]string{username, cfg.ClusterName}, "@")
-
-	if cfg.EmailClaim != "" {
-		log.Warn("using the Email Claim config setting is deprecated. Gangway uses `UsernameClaim@ClusterName`. This field will be removed in a future version.")
+	_, current, _ := serverSession(r)
+	visibleClaims := make(map[string]interface{})
+	for _, name := range []string{"iss", "aud", "sub", "email", "email_verified", "name", "groups", "iat", "exp", "auth_time", "jti", "at_hash", "c_hash"} {
+		if value, exists := claims[name]; exists {
+			visibleClaims[name] = value
+		}
 	}
-
-	info := &userInfo{
-		ClusterName:  cfg.ClusterName,
-		AppName:      cfg.AppName,
-		CompanyName:  cfg.CompanyName,
-		CompanyLogo:  cfg.CompanyLogo,
-		Username:     username,
-		Claims:       claims,
-		KubeCfgUser:  kubeCfgUser,
-		IDToken:      idToken,
-		RefreshToken: refreshToken,
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		IssuerURL:    cfg.IssuerURL,
-		APIServerURL: cfg.APIServerURL,
-		ClusterCA:    string(caBytes),
-		HTTPPath:     cfg.HTTPPath,
-	}
-	return info
+	return &userInfo{ClusterName: cfg.ClusterName, AppName: cfg.AppName, CompanyName: cfg.CompanyName, CompanyLogo: cfg.CompanyLogo, Username: username, Claims: visibleClaims, KubeCfgUser: strings.Join([]string{username, cfg.ClusterName}, "@"), IDToken: idToken, RefreshToken: refreshToken, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret, IssuerURL: cfg.IssuerURL, APIServerURL: cfg.APIServerURL, ClusterCA: string(caBytes), HTTPPath: cfg.HTTPPath, RedirectURL: cfg.RedirectURL, LogoutCSRF: current.LogoutCSRF}
 }
