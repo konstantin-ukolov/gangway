@@ -25,34 +25,99 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/gorilla/sessions"
 	"github.com/heptiolabs/gangway/internal/config"
 	"github.com/heptiolabs/gangway/internal/session"
 	"golang.org/x/oauth2"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api/v1"
 )
 
+var testApp *App
+
 func testInit() {
-	gangwayUserSession = session.New("test")
-	transportConfig = config.NewTransportConfig("")
-	verifyIDToken = func(_ context.Context, _ string) (map[string]interface{}, error) {
+	testConfig := (*config.Config)(nil)
+	if testApp != nil {
+		testConfig = testApp.Config
+	}
+	if testConfig == nil {
+		testConfig = &config.Config{HTTPPath: "", SessionTTLHours: 8, OAuthStateTTLMinutes: 10, UsernameClaim: "sub"}
+	}
+	sessions := session.NewMemoryStore(time.Hour)
+	transport := config.NewTransportConfig("")
+	verify := func(_ context.Context, _ string) (map[string]interface{}, error) {
 		return map[string]interface{}{
 			"sub": "gangway@heptio.com",
 			"iss": "GangwayTest",
 		}, nil
 	}
 
-	oauth2Cfg = &oauth2.Config{
+	oauthConfig := &oauth2.Config{
 		ClientID:     "cfg.ClientID",
 		ClientSecret: "qwertyuiopasdfghjklzxcvbnm123456",
 		RedirectURL:  "cfg.RedirectURL",
 	}
 
-	o2token = &FakeToken{
-		OAuth2Cfg: oauth2Cfg,
+	token := &FakeToken{
+		OAuth2Cfg: oauthConfig,
+	}
+	testApp = &App{
+		Config:        testConfig,
+		OAuth2Config:  oauthConfig,
+		Token:         token,
+		Sessions:      sessions,
+		Transport:     transport,
+		VerifyIDToken: verify,
+	}
+}
+
+func seedServerSession(t *testing.T, req *http.Request, state, idToken, refreshToken string) {
+	t.Helper()
+	id, err := testApp.Sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testApp.Sessions.Save(id, session.ServerSession{State: state, IDToken: idToken, RefreshToken: refreshToken}); err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: serverSessionCookie, Value: id})
+}
+
+func TestLogoutRequiresPOSTAndCSRF(t *testing.T) {
+	testInit()
+	testApp.Config = &config.Config{HTTPPath: "", SessionTTLHours: 8}
+	req, err := http.NewRequest(http.MethodGet, "/logout", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	testApp.logoutHandler(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET logout status: got %d, want %d", rr.Code, http.StatusMethodNotAllowed)
+	}
+
+	id, err := testApp.Sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testApp.Sessions.Save(id, session.ServerSession{IDToken: "id", LogoutCSRF: "expected"}); err != nil {
+		t.Fatal(err)
+	}
+	req, err = http.NewRequest(http.MethodPost, "/logout", strings.NewReader("csrf_token=wrong"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: serverSessionCookie, Value: id})
+	rr = httptest.NewRecorder()
+	testApp.logoutHandler(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("invalid CSRF status: got %d, want %d", rr.Code, http.StatusForbidden)
+	}
+	if _, ok := testApp.Sessions.Get(id); !ok {
+		t.Fatal("session was deleted after invalid CSRF token")
 	}
 }
 
@@ -62,12 +127,12 @@ func TestHomeHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg = &config.Config{
+	testApp.Config = &config.Config{
 		HTTPPath: "",
 	}
 
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(homeHandler)
+	handler := http.HandlerFunc(testApp.homeHandler)
 
 	handler.ServeHTTP(rr, req)
 	if status := rr.Code; status != http.StatusOK {
@@ -94,10 +159,9 @@ func TestCallbackHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var req *http.Request
 			var rsp *httptest.ResponseRecorder
-			var session *sessions.Session
 			var err error
 
-			cfg = &config.Config{
+			testApp.Config = &config.Config{
 				HTTPPath: "/foo",
 			}
 
@@ -109,25 +173,15 @@ func TestCallbackHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Create request
-			if session, err = gangwayUserSession.Session.Get(req, "gangway"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-
-			// Create state session variable
-			session.Values["state"] = tc.params["state"]
-			if err = session.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-
 			// Add query params to request
 			q := req.URL.Query()
 			for k, v := range tc.params {
 				q.Add(k, v)
 			}
 			req.URL.RawQuery = q.Encode()
+			seedServerSession(t, req, tc.params["state"], "", "")
 
-			handler := http.HandlerFunc(callbackHandler)
+			handler := http.HandlerFunc(testApp.callbackHandler)
 
 			// Call Handler
 			handler.ServeHTTP(rsp, req)
@@ -140,6 +194,53 @@ func TestCallbackHandler(t *testing.T) {
 		})
 	}
 
+}
+
+func TestCallbackRejectsExpiredState(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?state=expired&code=code", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := testApp.Sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testApp.Sessions.Save(id, session.ServerSession{State: "expired", StateExpiresAt: time.Now().Add(-time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: serverSessionCookie, Value: id})
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expired state status: got %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestCallbackRequiresSessionCookie(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?state=state&code=code", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("missing session status: got %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestCallbackRejectsOIDCError(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?error=access_denied", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("OIDC error status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
 }
 func TestCommandLineHandler(t *testing.T) {
 	tests := map[string]struct {
@@ -189,12 +290,9 @@ func TestCommandLineHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var req *http.Request
 			var rsp *httptest.ResponseRecorder
-			var session *sessions.Session
-			var sessionIDToken *sessions.Session
-			var sessionRefreshToken *sessions.Session
 			var err error
 
-			cfg = &config.Config{
+			testApp.Config = &config.Config{
 				HTTPPath:      "/foo",
 				EmailClaim:    tc.emailClaim,
 				UsernameClaim: tc.usernameClaim,
@@ -210,39 +308,15 @@ func TestCommandLineHandler(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// Create request
-			if session, err = gangwayUserSession.Session.Get(req, "gangway"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-			if sessionIDToken, err = gangwayUserSession.Session.Get(req, "gangway_id_token"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-			if sessionRefreshToken, err = gangwayUserSession.Session.Get(req, "gangway_refresh_token"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-
-			// Create state session variable
-			session.Values["state"] = tc.params["state"]
-			sessionIDToken.Values["id_token"] = tc.params["id_token"]
-			sessionRefreshToken.Values["refresh_token"] = tc.params["refresh_token"]
-			if err = session.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-			if err = sessionIDToken.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-			if err = sessionRefreshToken.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-
 			// Add query params to request
 			q := req.URL.Query()
 			for k, v := range tc.params {
 				q.Add(k, v)
 			}
 			req.URL.RawQuery = q.Encode()
+			seedServerSession(t, req, "", tc.params["id_token"], tc.params["refresh_token"])
 
-			handler := http.HandlerFunc(commandlineHandler)
+			handler := http.HandlerFunc(testApp.commandlineHandler)
 
 			// Call Handler
 			handler.ServeHTTP(rsp, req)
@@ -304,9 +378,6 @@ func TestKubeconfigHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var req *http.Request
 			var rsp *httptest.ResponseRecorder
-			var session *sessions.Session
-			var sessionIDToken *sessions.Session
-			var sessionRefreshToken *sessions.Session
 			var err error
 
 			// Create dummy cluster CA file
@@ -318,8 +389,8 @@ func TestKubeconfigHandler(t *testing.T) {
 			fmt.Fprint(f, clusterCAData)
 
 			// Set config global var
-			cfg = &tc.cfg
-			cfg.ClusterCAPath = f.Name()
+			testApp.Config = &tc.cfg
+			testApp.Config.ClusterCAPath = f.Name()
 
 			// Init variables
 			rsp = NewRecorder()
@@ -330,36 +401,15 @@ func TestKubeconfigHandler(t *testing.T) {
 			}
 
 			// Create request
-			if session, err = gangwayUserSession.Session.Get(req, "gangway"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-			if sessionIDToken, err = gangwayUserSession.Session.Get(req, "gangway_id_token"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-			if sessionRefreshToken, err = gangwayUserSession.Session.Get(req, "gangway_refresh_token"); err != nil {
-				t.Fatalf("Error getting session: %v", err)
-			}
-
-			sessionIDToken.Values["id_token"] = tc.params["id_token"]
-			sessionRefreshToken.Values["refresh_token"] = tc.params["refresh_token"]
-			if err = session.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-			if err = sessionIDToken.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-			if err = sessionRefreshToken.Save(req, rsp); err != nil {
-				t.Fatal(err)
-			}
-
 			// Add query params to request
 			q := req.URL.Query()
 			for k, v := range tc.params {
 				q.Add(k, v)
 			}
 			req.URL.RawQuery = q.Encode()
+			seedServerSession(t, req, "", tc.params["id_token"], tc.params["refresh_token"])
 
-			handler := http.HandlerFunc(kubeConfigHandler)
+			handler := http.HandlerFunc(testApp.kubeConfigHandler)
 
 			// Call Handler
 			handler.ServeHTTP(rsp, req)
@@ -370,6 +420,12 @@ func TestKubeconfigHandler(t *testing.T) {
 			}
 			// if response code is OK, validate the kubeconfig
 			if rsp.Code == 200 {
+				if got := rsp.Header().Get("Cache-Control"); got != "no-store" {
+					t.Errorf("expected no-store cache policy, got %q", got)
+				}
+				if got := rsp.Header().Get("Content-Security-Policy"); got != "default-src 'none'" {
+					t.Errorf("expected download CSP, got %q", got)
+				}
 				bodyBytes, err := ioutil.ReadAll(rsp.Body)
 				if err != nil {
 					t.Fatalf("error reading body: %v", err)
@@ -384,11 +440,11 @@ func TestKubeconfigHandler(t *testing.T) {
 					t.Fatalf("Found %d clusters in the generated kubeconfig, expected 1", len(kubeconfig.Clusters))
 				}
 				cluster := kubeconfig.Clusters[0]
-				if cluster.Name != cfg.ClusterName {
-					t.Errorf("Expected cluster name to be %q, but found %q", cfg.ClusterName, kubeconfig.Clusters[0].Name)
+				if cluster.Name != testApp.Config.ClusterName {
+					t.Errorf("Expected cluster name to be %q, but found %q", testApp.Config.ClusterName, kubeconfig.Clusters[0].Name)
 				}
-				if cluster.Cluster.Server != cfg.APIServerURL {
-					t.Errorf("Expected cluster server to be %q, but found %q", cfg.APIServerURL, cluster.Cluster.Server)
+				if cluster.Cluster.Server != testApp.Config.APIServerURL {
+					t.Errorf("Expected cluster server to be %q, but found %q", testApp.Config.APIServerURL, cluster.Cluster.Server)
 				}
 				if string(cluster.Cluster.CertificateAuthorityData) != clusterCAData {
 					t.Errorf("Expected cluster CA Data %q, but got %q", clusterCAData, string(cluster.Cluster.CertificateAuthorityData))
@@ -403,8 +459,8 @@ func TestKubeconfigHandler(t *testing.T) {
 					t.Errorf("Expected AuthInfo.Name %q, but got %q", tc.expectedAuthInfoName, authInfo.Name)
 				}
 
-				if authInfo.AuthInfo.AuthProvider.Name != "oidc" {
-					t.Errorf("expecetd authprovider to be oidc, got %s", authInfo.AuthInfo.AuthProvider.Name)
+				if authInfo.AuthInfo.AuthProvider == nil || authInfo.AuthInfo.AuthProvider.Name != "oidc" {
+					t.Fatal("expected legacy OIDC auth provider")
 				}
 				if !reflect.DeepEqual(authInfo.AuthInfo.AuthProvider.Config, tc.expectedAuthInfoAuthProviderConfig) {
 					t.Errorf("Expected %v, got %v", tc.expectedAuthInfoAuthProviderConfig, authInfo.AuthInfo.AuthProvider.Config)
@@ -415,8 +471,8 @@ func TestKubeconfigHandler(t *testing.T) {
 					t.Fatalf("Found %d contexts in the generated kubeconfig, expected 1", len(kubeconfig.Contexts))
 				}
 				context := kubeconfig.Contexts[0]
-				if context.Name != cfg.ClusterName {
-					t.Errorf("Expected context name to be %q, but found %q", cfg.ClusterName, context.Name)
+				if context.Name != testApp.Config.ClusterName {
+					t.Errorf("Expected context name to be %q, but found %q", testApp.Config.ClusterName, context.Name)
 				}
 				if context.Context.Cluster != cluster.Name {
 					t.Errorf("Cluster name %q in context does not match cluster name %q", context.Context.Cluster, cluster.Name)
@@ -440,10 +496,8 @@ func TestUnauthedCommandlineHandlerRedirect(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	session.New("test")
-
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(commandlineHandler)
+	handler := http.HandlerFunc(testApp.commandlineHandler)
 
 	handler.ServeHTTP(rr, req)
 	if status := rr.Code; status != http.StatusTemporaryRedirect {

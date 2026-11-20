@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gangway-test
+  namespace: dex
+data:
+  gangway.yaml: |
+    host: 0.0.0.0
+    port: 8080
+    clusterName: suecp-cluster-test
+    appName: Кластер СУ ЕЦП (тест)
+    companyName: Гистех
+    companyLogo: /assets/layered-logo.svg
+    issuerURL: https://dex.gistech.mng
+    clientID: k8s-login.gistech.mng
+    authorizeURL: https://dex.gistech.mng/auth
+    tokenURL: https://dex.gistech.mng/token
+    redirectURL: https://gangway.gistech.mng/callback
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
+      - offline_access
+    usernameClaim: email
+    apiServerURL: https://k8s-api.admins-k8s.common.pd33.udp.gtn:6443
+    clusterCAPath: /etc/gangway/cluster-ca/ca.crt
+    trustedCAPath: /etc/gangway/ca/ca.crt
+    httpPath: ""
+    sessionTTLHours: 8
+    sessionMaxCount: 10000
+    oauthStateTTLMinutes: 10

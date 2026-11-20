@@ -65,7 +65,7 @@
             <div class="nav-wrapper container"><a id="logo-container" href="#" class="brand-logo company-brand">{{ if .CompanyLogo }}<img src="{{ .CompanyLogo }}" alt="{{ .CompanyName }}">{{ end }}<span>{{ .CompanyName }}</span></a>
             <ul class="right hide-on-med-and-down">
                 <li class="theme-toggle-item"><button class="language-button" type="button" data-language-toggle aria-label="Сменить язык">EN</button><button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему">☾ Тёмная тема</button></li>
-                <li><a href="{{ .HTTPPath }}/logout"><span data-lang="ru">Выйти</span><span data-lang="en">Log out</span></a></li>
+                <li><form method="post" action="{{ .HTTPPath }}/logout" style="margin:0"><input type="hidden" name="csrf_token" value="{{ .LogoutCSRF }}"><button type="submit" style="background:none;border:0;color:#fff;cursor:pointer;font:inherit;padding:0 15px;height:64px"><span data-lang="ru">Выйти</span><span data-lang="en">Log out</span></button></form></li>
             </ul>
 
             <ul id="nav-mobile" class="side-nav">
@@ -85,8 +85,8 @@
                </div>
                <details class="token-help">
                  <summary><span data-lang="ru">Подробнее о сроке действия</span><span data-lang="en">More about token lifetime</span></summary>
-                 <p class="muted" data-lang="ru">Время указано в часовом поясе вашего устройства. kubectl и Lens с поддержкой OIDC могут автоматически получить новый ID token через refresh token. Повторно войдите, если обновление токена отклонено или клиент сообщает об истечении сессии. Срок действия refresh token из ID token определить нельзя.</p>
-                 <p class="muted" data-lang="en">Times use your device's time zone. OIDC-enabled kubectl and Lens clients can automatically obtain a new ID token using the refresh token. Sign in again if refresh is rejected or the client reports an expired session. The refresh token lifetime cannot be determined from the ID token.</p>
+                  <p class="muted" data-lang="ru">Время указано в часовом поясе вашего устройства. kubectl и Lens с поддержкой OIDC могут автоматически получить новый ID token через refresh token.</p>
+                  <p class="muted" data-lang="en">Times use your device's time zone. OIDC-enabled kubectl and Lens clients can automatically obtain a new ID token using the refresh token.</p>
                  <a href="{{ .HTTPPath }}/login"><span data-lang="ru">Войти повторно</span><span data-lang="en">Sign in again</span></a>
                </details>
              </section>
@@ -141,9 +141,10 @@ chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
              </code>
            </pre>
-            <div class="row">
-                <div class="col s12 right-align"><a href="{{ .HTTPPath }}/kubeconf" class="btn-large waves-effect waves-light blue" data-i18n="download">Скачать kubeconfig</a></div>
-                <div class="col s12" data-i18n="selectOs">После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.</div>
+             <div class="row">
+                 <div class="col s12"><p class="red-text text-darken-2"><strong data-lang="ru">Важно:</strong><strong data-lang="en">Important:</strong> <span data-lang="ru">kubeconfig содержит ID token, refresh token и client secret. Не отправляйте его в Git, чаты, тикеты или резервные копии.</span><span data-lang="en">This kubeconfig contains an ID token, refresh token, and client secret. Do not share it in Git, chats, tickets, or backups.</span></p></div>
+                 <div class="col s12 right-align"><a href="{{ .HTTPPath }}/kubeconf" class="btn-large waves-effect waves-light blue" data-i18n="download">Скачать kubeconfig</a></div>
+                 <div class="col s12" data-i18n="selectOs">После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.</div>
             </div>
             <div class="os-tabs" role="tablist" aria-label="Операционная система">
                 <button class="os-tab active" type="button" data-os-tab="linux">Linux / macOS</button>
@@ -234,7 +235,7 @@ Remove-Item "ca-{{ .ClusterName }}.pem"</code></pre>
              document.querySelectorAll('[data-os-tab]').forEach(function (tab) { tab.addEventListener('click', function () { document.querySelectorAll('[data-os-tab], [data-os-panel]').forEach(function (item) { item.classList.remove('active'); }); tab.classList.add('active'); document.querySelector('[data-os-panel="' + tab.dataset.osTab + '"]').classList.add('active'); }); });
              document.querySelectorAll('[data-copy]').forEach(function (copyButton) { copyButton.addEventListener('click', function () { var code = document.getElementById(copyButton.dataset.copy); navigator.clipboard.writeText(code.textContent).then(function () { var old = copyButton.textContent; copyButton.textContent = language === 'ru' ? 'Скопировано' : 'Copied'; setTimeout(function () { copyButton.textContent = old; }, 1500); }); }); });
              var langButton = document.querySelector('[data-language-toggle]');
-             var translations = { ru: { welcome: 'Добро пожаловать', claims: 'Данные пользователя, полученные от провайдера идентификации:', access: 'Для доступа к кластеру Kubernetes', fromCommandLine: 'через командную строку настройте OpenID Connect (OIDC) одним из способов ниже.', install: 'Установите kubectl: в Windows —', newPowerShell: '(после установки откройте новый PowerShell), в macOS —', forLinux: 'Для Linux:', download: 'Скачать kubeconfig', selectOs: 'После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.', copy: 'Копировать' }, en: { welcome: 'Welcome', claims: 'User information received from the identity provider:', access: 'To access the Kubernetes cluster', fromCommandLine: 'from the command line, configure OpenID Connect (OIDC) using one of the options below.', install: 'Install kubectl: on Windows —', newPowerShell: '(open a new PowerShell after installation), on macOS —', forLinux: 'For Linux:', download: 'Download kubeconfig', selectOs: 'After installing kubectl, select your operating system and copy the entire command block.', copy: 'Copy' } };
+              var translations = { ru: { welcome: 'Добро пожаловать', claims: 'Данные пользователя, полученные от провайдера идентификации:', access: 'Для доступа к кластеру Kubernetes', fromCommandLine: 'через командную строку настройте OIDC одним из способов ниже.', install: 'Установите kubectl: в Windows —', newPowerShell: '(после установки откройте новый PowerShell), в macOS —', forLinux: 'Для Linux:', download: 'Скачать kubeconfig', selectOs: 'После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.', copy: 'Копировать' }, en: { welcome: 'Welcome', claims: 'User information received from the identity provider:', access: 'To access the Kubernetes cluster', fromCommandLine: 'from the command line, configure OIDC using one of the options below.', install: 'Install kubectl: on Windows —', newPowerShell: '(open a new PowerShell after installation), on macOS —', forLinux: 'For Linux:', download: 'Download kubeconfig', selectOs: 'After installing kubectl, select your operating system and copy the entire command block.', copy: 'Copy' } };
              function applyLanguage(lang) { document.documentElement.lang = lang; Object.keys(translations[lang]).forEach(function (key) { document.querySelectorAll('[data-i18n="' + key + '"]').forEach(function (item) { item.textContent = translations[lang][key]; }); }); if (langButton) langButton.textContent = lang === 'ru' ? 'RU' : 'EN'; }
              var language = localStorage.getItem('gangway-language') || 'ru'; applyLanguage(language);
              if (langButton) langButton.addEventListener('click', function () { language = language === 'ru' ? 'en' : 'ru'; localStorage.setItem('gangway-language', language); applyLanguage(language); });

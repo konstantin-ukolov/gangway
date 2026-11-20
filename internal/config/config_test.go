@@ -37,7 +37,6 @@ func TestEnvionmentOverrides(t *testing.T) {
 	os.Setenv("GANGWAY_CLUSTER_CA_PATH", "/etc/ssl/certs/ca-certificates.crt")
 	os.Setenv("GANGWAY_CLUSTER_NAME", "test-cluster")
 	os.Setenv("GANGWAY_APP_NAME", "Kubernetes Login")
-	os.Setenv("GANGWAY_SESSION_SECURITY_KEY", "testing")
 	os.Setenv("GANGWAY_TOKEN_URL", "https://foo.bar/token")
 	os.Setenv("GANGWAY_AUDIENCE", "foo")
 	os.Setenv("GANGWAY_SCOPES", "groups,sub")
@@ -95,5 +94,33 @@ func TestGetRootPathPrefix(t *testing.T) {
 				t.Fatalf("GetRootPathPrefix(): want: %v, got: %v", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestConfigSessionDefaults(t *testing.T) {
+	t.Setenv("GANGWAY_SESSION_TTL_HOURS", "")
+	t.Setenv("GANGWAY_SESSION_MAX_COUNT", "")
+	t.Setenv("GANGWAY_OAUTH_STATE_TTL_MINUTES", "")
+	t.Setenv("GANGWAY_PORT", "8080")
+	// envconfig treats present-but-empty numeric variables as invalid.
+	_ = os.Unsetenv("GANGWAY_SESSION_TTL_HOURS")
+	_ = os.Unsetenv("GANGWAY_SESSION_MAX_COUNT")
+	_ = os.Unsetenv("GANGWAY_OAUTH_STATE_TTL_MINUTES")
+	t.Setenv("GANGWAY_AUTHORIZE_URL", "https://issuer.example/authorize")
+	t.Setenv("GANGWAY_ISSUER_URL", "https://issuer.example")
+	t.Setenv("GANGWAY_APISERVER_URL", "https://kubernetes.example")
+	t.Setenv("GANGWAY_CLIENT_ID", "client")
+	t.Setenv("GANGWAY_CLIENT_SECRET", "secret")
+	t.Setenv("GANGWAY_REDIRECT_URL", "https://gangway.example/callback")
+	t.Setenv("GANGWAY_CLUSTER_CA_PATH", "/tmp/ca.crt")
+	t.Setenv("GANGWAY_CLUSTER_NAME", "cluster")
+	t.Setenv("GANGWAY_APP_NAME", "Gangway")
+	t.Setenv("GANGWAY_TOKEN_URL", "https://issuer.example/token")
+	cfg, err := NewConfig("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.SessionTTLHours != 8 || cfg.SessionMaxCount != 10000 || cfg.OAuthStateTTLMinutes != 10 {
+		t.Fatalf("unexpected session defaults: %#v", cfg)
 	}
 }
