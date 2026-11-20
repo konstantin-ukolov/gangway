@@ -309,7 +309,16 @@ func (a *App) kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d, err := yaml.Marshal(generateKubeConfig(info))
+	kubeconfig := generateKubeConfig(info)
+	if r.URL.Query().Get("mode") == "exec" {
+		kubeconfig.AuthInfos[0].Name += "-exec"
+		kubeconfig.Contexts[0].Context.AuthInfo = kubeconfig.AuthInfos[0].Name
+		kubeconfig.AuthInfos[0].AuthInfo = clientcmdapi.AuthInfo{Exec: &clientcmdapi.ExecConfig{
+			APIVersion: "client.authentication.k8s.io/v1", Command: "gangway-login",
+			Args: []string{"--server", a.publicURL(), "--username", info.Username}, InteractiveMode: "Never",
+		}}
+	}
+	d, err := yaml.Marshal(kubeconfig)
 	if err != nil {
 		log.Errorf("Error creating kubeconfig - %s", err.Error())
 		http.Error(w, "Error creating kubeconfig", http.StatusInternalServerError)
@@ -319,6 +328,9 @@ func (a *App) kubeConfigHandler(w http.ResponseWriter, r *http.Request) {
 	// tell the browser the returned content should be downloaded
 	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="kubeconfig.yaml"`)
+	if r.URL.Query().Get("mode") == "exec" {
+		w.Header().Set("Content-Disposition", `attachment; filename="kubeconfig-exec.yaml"`)
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Content-Security-Policy", "default-src 'none'")
