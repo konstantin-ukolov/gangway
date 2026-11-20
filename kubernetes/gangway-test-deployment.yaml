@@ -8,6 +8,8 @@ metadata:
     app.kubernetes.io/part-of: kubernetes-oidc
 spec:
   replicas: 1
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 300
   selector:
     matchLabels:
       app.kubernetes.io/name: gangway-test
@@ -18,6 +20,7 @@ spec:
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -26,8 +29,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gangway
-          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v11
-          imagePullPolicy: Always
+          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway@sha256:634c961950073e07c34a12dfa5d869ff94b11f52c1d2ce93cf24d5dd471bb773
+          imagePullPolicy: IfNotPresent
           args: ["-config", "/etc/gangway/gangway.yaml"]
           ports:
             - name: http
@@ -38,11 +41,6 @@ spec:
                 secretKeyRef:
                   name: gangway-secrets
                   key: clientSecret
-            - name: GANGWAY_SESSION_SECURITY_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: gangway-secrets
-                  key: sessionSecurityKey
           volumeMounts:
             - name: config
               mountPath: /etc/gangway

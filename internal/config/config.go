@@ -52,7 +52,6 @@ type Config struct {
 	TrustedCAPath          string   `yaml:"trustedCAPath" envconfig:"trusted_ca_path"`
 	HTTPPath               string   `yaml:"httpPath" envconfig:"http_path"`
 
-	SessionSecurityKey     string `yaml:"sessionSecurityKey" envconfig:"SESSION_SECURITY_KEY"`
 	SessionTTLHours        int    `yaml:"sessionTTLHours" envconfig:"SESSION_TTL_HOURS"`
 	SessionMaxCount        int    `yaml:"sessionMaxCount" envconfig:"SESSION_MAX_COUNT"`
 	OAuthStateTTLMinutes   int    `yaml:"oauthStateTTLMinutes" envconfig:"OAUTH_STATE_TTL_MINUTES"`
@@ -124,7 +123,6 @@ func (cfg *Config) Validate() error {
 		{cfg.ClientID == "", "no clientID specified"},
 		{cfg.ClientSecret == "" && !cfg.AllowEmptyClientSecret, "no clientSecret specified"},
 		{cfg.RedirectURL == "", "no redirectURL specified"},
-		{cfg.SessionSecurityKey == "", "no SessionSecurityKey specified"},
 		{cfg.APIServerURL == "", "no apiServerURL specified"},
 		{cfg.SessionTTLHours <= 0, "sessionTTLHours must be positive"},
 		{cfg.SessionMaxCount <= 0, "sessionMaxCount must be positive"},

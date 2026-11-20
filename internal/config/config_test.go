@@ -37,7 +37,6 @@ func TestEnvionmentOverrides(t *testing.T) {
 	os.Setenv("GANGWAY_CLUSTER_CA_PATH", "/etc/ssl/certs/ca-certificates.crt")
 	os.Setenv("GANGWAY_CLUSTER_NAME", "test-cluster")
 	os.Setenv("GANGWAY_APP_NAME", "Kubernetes Login")
-	os.Setenv("GANGWAY_SESSION_SECURITY_KEY", "testing")
 	os.Setenv("GANGWAY_TOKEN_URL", "https://foo.bar/token")
 	os.Setenv("GANGWAY_AUDIENCE", "foo")
 	os.Setenv("GANGWAY_SCOPES", "groups,sub")

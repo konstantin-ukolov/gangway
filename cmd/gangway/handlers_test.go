@@ -195,6 +195,53 @@ func TestCallbackHandler(t *testing.T) {
 	}
 
 }
+
+func TestCallbackRejectsExpiredState(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?state=expired&code=code", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := testApp.Sessions.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testApp.Sessions.Save(id, session.ServerSession{State: "expired", StateExpiresAt: time.Now().Add(-time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(&http.Cookie{Name: serverSessionCookie, Value: id})
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expired state status: got %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestCallbackRequiresSessionCookie(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?state=state&code=code", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("missing session status: got %d, want %d", rr.Code, http.StatusForbidden)
+	}
+}
+
+func TestCallbackRejectsOIDCError(t *testing.T) {
+	testInit()
+	req, err := http.NewRequest(http.MethodGet, "/callback?error=access_denied", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	testApp.callbackHandler(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("OIDC error status: got %d, want %d", rr.Code, http.StatusUnauthorized)
+	}
+}
 func TestCommandLineHandler(t *testing.T) {
 	tests := map[string]struct {
 		params                     map[string]string

@@ -20,9 +20,12 @@ https://gangway.gistech.mng/callback
 Сборка и публикация образа:
 
 ```powershell
-docker build -t nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v1 .
-    docker push nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v11
+docker build -t nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v13 .
+docker push nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway:test-inmemory-v13
 ```
+
+Тестовый Deployment закреплён на digest образа
+`sha256:634c961950073e07c34a12dfa5d869ff94b11f52c1d2ce93cf24d5dd471bb773`.
 
 Применение:
 

@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gangway
-          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway@sha256:3be106db21def4dead33cd803c12df13d481322f2ec468fb79c19bb95fe80650
+          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway@sha256:634c961950073e07c34a12dfa5d869ff94b11f52c1d2ce93cf24d5dd471bb773
           imagePullPolicy: Always
           args: ["-config", "/etc/gangway/gangway.yaml"]
           ports:
@@ -48,11 +48,6 @@ spec:
               value: Гистех
             - name: GANGWAY_COMPANY_LOGO
               value: /assets/layered-logo.svg
-            - name: GANGWAY_SESSION_SECURITY_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: gangway-secrets
-                  key: sessionSecurityKey
           volumeMounts:
             - name: config
               mountPath: /etc/gangway
