@@ -233,8 +233,39 @@ docker build -t gangway:local .
 
 ## Kubernetes deployment
 
-В репозитории сохранены оригинальные deployment-ресурсы и отдельные тестовые
-ресурсы с суффиксом `-test`:
+Production разворачивается и обновляется Helm chart из
+[`charts/gangway`](charts/gangway). Chart сохраняет production-имена ресурсов,
+namespace `dex`, внешний Secret `gangway-secrets`, HTTPRoute и immutable image
+digest. Secret создаётся и ротируется отдельно от Helm.
+
+Проверка chart:
+
+```powershell
+helm lint .\charts\gangway
+helm template gangway .\charts\gangway -n dex
+```
+
+Установка или обновление production:
+
+```powershell
+helm upgrade --install gangway .\charts\gangway `
+  --namespace dex `
+  --create-namespace `
+  --wait `
+  --timeout 5m
+```
+
+Проверка release и rollout:
+
+```powershell
+helm status gangway -n dex
+kubectl rollout status deployment/gangway -n dex
+```
+
+Текущие production-манифесты в `kubernetes/gangway-*.yaml` сохранены как
+reference и для аудита. Не применяйте их поверх Helm-managed ресурсов.
+
+В репозитории также сохранены отдельные тестовые ресурсы с суффиксом `-test`:
 
 - `kubernetes/gangway-test-config.yaml`;
 - `kubernetes/gangway-test-deployment.yaml`;

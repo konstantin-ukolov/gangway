@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gangway.fullname" . }}
+  labels:
+    {{- include "gangway.labels" . | nindent 4 }}
+data:
+  gangway.yaml: |
+    host: {{ .Values.config.host | quote }}
+    port: {{ .Values.config.port }}
+    clusterName: {{ .Values.config.clusterName | quote }}
+    appName: {{ .Values.config.appName | quote }}
+    companyName: {{ .Values.config.companyName | quote }}
+    companyLogo: {{ .Values.config.companyLogo | quote }}
+    issuerURL: {{ .Values.config.issuerURL | quote }}
+    clientID: {{ .Values.config.clientID | quote }}
+    authorizeURL: {{ .Values.config.authorizeURL | quote }}
+    tokenURL: {{ .Values.config.tokenURL | quote }}
+    redirectURL: {{ .Values.config.redirectURL | quote }}
+    scopes:
+{{ toYaml .Values.config.scopes | nindent 6 }}
+    usernameClaim: {{ .Values.config.usernameClaim | quote }}
+    apiServerURL: {{ .Values.config.apiServerURL | quote }}
+    clusterCAPath: {{ .Values.config.clusterCAPath | quote }}
+    trustedCAPath: {{ .Values.config.trustedCAPath | quote }}
+    httpPath: {{ .Values.config.httpPath | quote }}

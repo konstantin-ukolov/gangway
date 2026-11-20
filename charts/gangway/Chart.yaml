@@ -1,0 +1,6 @@
+apiVersion: v2
+name: gangway
+description: OIDC login portal and kubeconfig generator for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "v20"

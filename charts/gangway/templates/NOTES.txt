@@ -1,0 +1,5 @@
+Gangway has been deployed as Helm release {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+URL: https://{{ .Values.route.hostname }}
+
+The existing Secret {{ .Values.secret.name }} is managed externally and was not created by this chart.
