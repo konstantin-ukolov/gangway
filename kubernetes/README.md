@@ -31,7 +31,12 @@
 
 6. После `helm upgrade` Dex должен содержать новый redirect URI.
 
-Применение ресурсов:
+Production управляется Helm chart из `../charts/gangway`. Файлы
+`gangway-config.yaml`, `gangway-deployment.yaml`, `gangway-service.yaml` и
+`gangway-route.yaml` сохранены как reference; не применяйте их поверх Helm-managed
+production ресурсов.
+
+Для тестового окружения применение ресурсов:
 
 ```powershell
 kubectl apply -f .\gangway-secret.yaml

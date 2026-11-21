@@ -57,6 +57,51 @@ legacy-клиентов не требуются.
 Скачанный kubeconfig содержит чувствительные данные. Его нельзя помещать в Git,
 чаты, тикеты, общие резервные копии или другие неконтролируемые хранилища.
 
+### Опциональный режим без токенов
+
+На странице после входа доступна альтернативная вкладка **«Без токенов + login
+utility»**. Она позволяет скачать kubeconfig, в котором нет ID token, refresh token
+и client secret. Вместо этого kubeconfig использует Kubernetes `exec`-плагин:
+
+```yaml
+users:
+  - name: user@cluster-exec
+    user:
+      exec:
+        apiVersion: client.authentication.k8s.io/v1
+        command: gangway-login
+        interactiveMode: Never
+        args:
+          - --server
+          - https://gangway.example
+          - --username
+          - user@example.com
+```
+
+Утилита `gangway-login` поставляется в вариантах для Linux, macOS и Windows.
+Перед первым использованием нужно один раз запустить `gangway-login --login` в
+интерактивном терминале, выполнить вход и вставить одноразовый код. Полученный
+`ExecCredential` сохраняется в локальном пользовательском кэше с ограниченными
+правами доступа. Последующие вызовы `kubectl` используют кэш автоматически до
+истечения ID token; после истечения токена login нужно повторить.
+
+Локального дискового кэша и автоматического refresh в этом режиме нет.
+Нужен интерактивный терминал; фоновые GUI-клиенты этим вариантом не поддерживаются.
+
+Пример использования:
+
+1. Скачать kubeconfig без токенов и бинарный файл `gangway-login` под свою ОС.
+2. Переименовать бинарный файл в `gangway-login` (`gangway-login.exe` в Windows)
+   и добавить его в `PATH`.
+3. Установить скачанный kubeconfig в `KUBECONFIG` или объединить его с текущим.
+4. Выполнить `kubectl get pods`.
+5. Выполнить интерактивный вход один раз:
+   `gangway-login --login --server https://login-k8s.gistech.mng --username <username>`.
+6. Открыть страницу Gangway, войти, нажать «Получить одноразовый код» и вставить
+   код в терминал утилиты.
+
+Режим kubeconfig с токенами остаётся доступен и используется по умолчанию.
+
 ### HTTP и OAuth hardening
 
 - logout выполняется только через `POST`;
@@ -188,8 +233,39 @@ docker build -t gangway:local .
 
 ## Kubernetes deployment
 
-В репозитории сохранены оригинальные deployment-ресурсы и отдельные тестовые
-ресурсы с суффиксом `-test`:
+Production разворачивается и обновляется Helm chart из
+[`charts/gangway`](charts/gangway). Chart сохраняет production-имена ресурсов,
+namespace `dex`, внешний Secret `gangway-secrets`, HTTPRoute и immutable image
+digest. Secret создаётся и ротируется отдельно от Helm.
+
+Проверка chart:
+
+```powershell
+helm lint .\charts\gangway
+helm template gangway .\charts\gangway -n dex
+```
+
+Установка или обновление production:
+
+```powershell
+helm upgrade --install gangway .\charts\gangway `
+  --namespace dex `
+  --create-namespace `
+  --wait `
+  --timeout 5m
+```
+
+Проверка release и rollout:
+
+```powershell
+helm status gangway -n dex
+kubectl rollout status deployment/gangway -n dex
+```
+
+Текущие production-манифесты в `kubernetes/gangway-*.yaml` сохранены как
+reference и для аудита. Не применяйте их поверх Helm-managed ресурсов.
+
+В репозитории также сохранены отдельные тестовые ресурсы с суффиксом `-test`:
 
 - `kubernetes/gangway-test-config.yaml`;
 - `kubernetes/gangway-test-deployment.yaml`;

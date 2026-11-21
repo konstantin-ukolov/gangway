@@ -37,6 +37,7 @@ import (
 )
 
 type App struct {
+	Codes         codeStore
 	Config        *config.Config
 	OAuth2Config  *oauth2.Config
 	Token         oidc.OAuth2Token
@@ -155,6 +156,9 @@ func main() {
 	http.Handle(fmt.Sprintf("%s/logout", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.logoutHandler))
 	http.Handle(fmt.Sprintf("%s/commandline", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.commandlineHandler))
 	http.Handle(fmt.Sprintf("%s/kubeconf", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.kubeConfigHandler))
+	http.Handle(fmt.Sprintf("%s/login-code", cfg.HTTPPath), loginRequiredHandlers.ThenFunc(app.loginCodeHandler))
+	http.HandleFunc(fmt.Sprintf("%s/redeem", cfg.HTTPPath), app.redeemHandler)
+	http.HandleFunc(fmt.Sprintf("%s/helper", cfg.HTTPPath), app.helperHandler)
 
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	// create http server with timeouts

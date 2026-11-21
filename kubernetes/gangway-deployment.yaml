@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: gangway
-          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway@sha256:634c961950073e07c34a12dfa5d869ff94b11f52c1d2ce93cf24d5dd471bb773
+          image: nexus-infra.admins-infra.common.pd34.udp.gtn/gangway/gangway@sha256:1897436027263806bf235f912ab18ae7cf5735856775f2752229f540107585ef
           imagePullPolicy: Always
           args: ["-config", "/etc/gangway/gangway.yaml"]
           ports:

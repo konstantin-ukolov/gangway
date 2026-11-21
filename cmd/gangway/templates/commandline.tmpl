@@ -33,7 +33,19 @@
         .os-tab.active { background: var(--primary); color: #fff; }
         .os-panel { display: none; clear: both; }
         .os-panel.active { display: block; }
-        .command-block { position: relative; }
+         .command-block { position: relative; }
+         .download-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 8px; }
+         .download-tab { border: 1px solid var(--primary); border-radius: 4px; background: transparent; color: var(--primary); cursor: pointer; padding: 8px 14px; }
+         .download-tab.active { background: var(--primary); color: #fff; }
+         .download-panel { display: none; }
+         .download-panel.active { display: block; }
+         .login-code-block, .login-command-block { background: #111827; color: #f8fafc; border-radius: 6px; padding: 14px; overflow-x: auto; }
+         .login-code-block code { color: #facc15; font: 700 1.5rem monospace; letter-spacing: .12em; }
+         .access-card { background: var(--surface); border: 1px solid var(--muted); border-radius: 8px; margin: 18px 0; padding: 18px; }
+         .access-card h6 { color: var(--primary); font-weight: 700; margin-top: 0; }
+         .utility-links { line-height: 2.2; }
+         .utility-links a { display: inline-block; margin-right: 10px; white-space: nowrap; }
+         .instruction-note { border-left: 4px solid var(--primary); padding: 8px 12px; background: rgba(37,99,235,.08); }
         .muted { color: var(--muted); }
         html[lang="ru"] [data-lang="en"], html[lang="en"] [data-lang="ru"] { display: none; }
         .token-status, .claims-details { background: var(--surface); border: 1px solid var(--muted); border-radius: 8px; padding: 16px; margin: 20px 0; overflow-wrap: anywhere; }
@@ -141,53 +153,124 @@ chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
              </code>
            </pre>
-             <div class="row">
-                 <div class="col s12"><p class="red-text text-darken-2"><strong data-lang="ru">Важно:</strong><strong data-lang="en">Important:</strong> <span data-lang="ru">kubeconfig содержит ID token, refresh token и client secret. Не отправляйте его в Git, чаты, тикеты или резервные копии.</span><span data-lang="en">This kubeconfig contains an ID token, refresh token, and client secret. Do not share it in Git, chats, tickets, or backups.</span></p></div>
-                 <div class="col s12 right-align"><a href="{{ .HTTPPath }}/kubeconf" class="btn-large waves-effect waves-light blue" data-i18n="download">Скачать kubeconfig</a></div>
-                 <div class="col s12" data-i18n="selectOs">После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.</div>
-            </div>
-            <div class="os-tabs" role="tablist" aria-label="Операционная система">
-                <button class="os-tab active" type="button" data-os-tab="linux">Linux / macOS</button>
-                <button class="os-tab" type="button" data-os-tab="windows">Windows PowerShell</button>
-            </div>
-            <div class="os-panel active command-block" data-os-panel="linux">
-                <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-command" data-i18n="copy">Копировать</button></div>
-                <pre><code id="linux-command" class="language-bash">cat &lt;&lt;'EOF' &gt; "ca-{{ .ClusterName }}.pem"
+             <div class="download-tabs" role="tablist" aria-label="Формат доступа">
+                 <button class="download-tab active" type="button" data-download-tab="tokens" data-i18n="tokensTab">Kubeconfig с токенами</button>
+                 <button class="download-tab" type="button" data-download-tab="exec" data-i18n="execTab">Без токенов + login utility</button>
+             </div>
+             <div class="download-panel active" data-download-panel="tokens">
+                  <p class="red-text text-darken-2"><strong data-lang="ru">Важно:</strong><strong data-lang="en">Important:</strong> <span data-lang="ru">kubeconfig содержит ID token, refresh token и client secret. Не отправляйте его в Git, чаты, тикеты или резервные копии.</span><span data-lang="en">This kubeconfig contains an ID token, refresh token, and client secret. Do not share it in Git, chats, tickets, or backups.</span></p>
+                  <a href="{{ .HTTPPath }}/kubeconf" class="btn-large waves-effect waves-light blue" data-i18n="download">Скачать kubeconfig</a>
+             </div>
+             <div class="download-panel" data-download-panel="exec">
+               <p><span data-lang="ru">Этот kubeconfig не содержит токены и client secret. Интерактивный вход выполняется один раз, после чего kubectl использует локальный кэш до истечения токена.</span><span data-lang="en">This kubeconfig contains no tokens or client secret. Sign in interactively once, then kubectl uses the local cache until the token expires.</span></p>
+               <a href="{{ .HTTPPath }}/kubeconf?mode=exec" class="btn waves-effect waves-light blue" data-i18n="downloadExec">Скачать kubeconfig без токенов</a>
+               <div class="access-card">
+                 <h6 data-i18n="utilityTitle">Скачать gangway-login</h6>
+                 <p class="muted" data-i18n="utilityText">Скачайте файл под свою ОС и сделайте его доступным в PATH под именем gangway-login.</p>
+                 <p class="utility-links"><a href="{{ .HTTPPath }}/helper?platform=linux-amd64">Linux amd64</a><a href="{{ .HTTPPath }}/helper?platform=linux-arm64">Linux arm64</a><a href="{{ .HTTPPath }}/helper?platform=darwin-amd64">macOS Intel</a><a href="{{ .HTTPPath }}/helper?platform=darwin-arm64">macOS Apple Silicon</a><a href="{{ .HTTPPath }}/helper?platform=windows-amd64">Windows x64</a><a href="{{ .HTTPPath }}/helper?platform=windows-arm64">Windows ARM64</a></p>
+               </div>
+               <div class="access-card">
+                 <h6 data-i18n="installTitle">Установка и запуск</h6>
+                 <p class="instruction-note" data-i18n="installNote">Выберите свою ОС, скачайте helper выше и выполните команды.</p>
+                 <h6>Linux / macOS</h6>
+                 <p><span data-lang="ru">Замените OS-ARCH на платформу скачанного файла (например, linux-amd64 или darwin-arm64).</span><span data-lang="en">Replace OS-ARCH with your downloaded platform (for example linux-amd64 or darwin-arm64).</span></p>
+                 <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="utility-unix-command" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="utility-unix-command" class="language-bash">chmod +x ./gangway-login-OS-ARCH
+sudo mv ./gangway-login-OS-ARCH /usr/local/bin/gangway-login
+kubectl --kubeconfig ./kubeconfig-exec.yaml get pods</code></pre>
+                 <h6>Windows PowerShell</h6>
+                 <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="utility-windows-command" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="utility-windows-command" class="language-powershell">New-Item -ItemType Directory -Force "$HOME\bin" | Out-Null
+Move-Item .\gangway-login-windows-amd64.exe "$HOME\bin\gangway-login.exe"
+$env:Path += ";$HOME\bin"
+kubectl --kubeconfig .\kubeconfig-exec.yaml get pods</code></pre>
+                 <p><span data-lang="ru">В Windows PATH выше действует в текущем окне PowerShell. Для постоянного использования добавьте каталог в пользовательский PATH. ARM64: <a href="{{ .HTTPPath }}/helper?platform=windows-arm64">скачать</a> и заменить имя файла в команде.</span><span data-lang="en">The Windows PATH change applies to this PowerShell window. Add the directory to your user PATH for persistent use. ARM64: <a href="{{ .HTTPPath }}/helper?platform=windows-arm64">download</a> and adjust the filename.</span></p>
+               </div>
+               <div class="access-card">
+                 <h6 data-i18n="loginTitle">Первичный вход</h6>
+                 <p data-i18n="utilityFlow">Один раз выполните эту команду в интерактивном терминале:</p>
+                 <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="login-command" data-i18n="copy">Копировать</button></div>
+                 <pre class="login-command-block"><code id="login-command">gangway-login --login --server https://login-k8s.gistech.mng --username {{ .Username }}</code></pre>
+                 <p class="muted" data-i18n="utilityFlowAfter">После этого kubectl использует локальный кэш автоматически до истечения токена.</p>
+                 <button class="btn waves-effect waves-light blue" type="button" id="generate-login-code" data-endpoint="{{ .HTTPPath }}/login-code" data-csrf="{{ .LogoutCSRF }}" data-i18n="generateCode">Получить одноразовый код</button>
+                 <div id="login-code-result" hidden>
+                   <p data-i18n="codeInstruction">Скопируйте этот код в окно, где запущен gangway-login --login:</p>
+                   <pre class="login-code-block"><code id="login-code-value"></code></pre>
+                 </div>
+               </div>
+             </div>
+             <div id="legacy-commands">
+              <div class="access-card">
+                <h6 data-i18n="tokenCommandsTitle">Настройка kubeconfig с токенами</h6>
+                <p class="instruction-note" data-i18n="tokenCommandsNote">Выберите свою операционную систему и скопируйте команды. ID token, refresh token и client secret будут записаны в kubeconfig.</p>
+             <div class="os-tabs" role="tablist" aria-label="Операционная система">
+                 <button class="os-tab active" type="button" data-os-tab="linux">Linux / macOS</button>
+                 <button class="os-tab" type="button" data-os-tab="windows">Windows PowerShell</button>
+             </div>
+              <div class="os-panel active command-block" data-os-panel="linux">
+                  <h6>Linux / macOS</h6>
+                  <p class="muted" data-i18n="tokenLinuxNote">Выполните шаги по порядку. Временный CA-файл удаляется на последнем шаге.</p>
+                  <h6 data-i18n="tokenStepCA">1. Сохранить CA</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-token-ca" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="linux-token-ca" class="language-bash">cat &lt;&lt;'EOF' &gt; "ca-{{ .ClusterName }}.pem"
 {{ .ClusterCA }}
-EOF
-kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs
-kubectl config set-credentials "{{ .KubeCfgUser }}" \
+EOF</code></pre>
+                  <h6 data-i18n="tokenStepCluster">2. Добавить кластер</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-token-cluster" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="linux-token-cluster" class="language-bash">kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs</code></pre>
+                  <h6 data-i18n="tokenStepCredentials">3. Добавить OIDC credentials</h6>
+                  <p class="red-text text-darken-2" data-i18n="tokenCredentialsWarning">Этот шаг содержит client secret, refresh token и ID token. Не сохраняйте команду в истории shell, Git, чатах или тикетах.</p>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-token-credentials" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="linux-token-credentials" class="language-bash">kubectl config set-credentials "{{ .KubeCfgUser }}" \
   --auth-provider=oidc \
   --auth-provider-arg='idp-issuer-url={{ .IssuerURL }}' \
   --auth-provider-arg='client-id={{ .ClientID }}' \
   --auth-provider-arg='client-secret={{ .ClientSecret }}' \
   --auth-provider-arg='refresh-token={{ .RefreshToken }}' \
-  --auth-provider-arg='id-token={{ .IDToken }}'
-kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
-kubectl config use-context "{{ .ClusterName }}"
-rm "ca-{{ .ClusterName }}.pem"</code></pre>
-            </div>
-            <div class="os-panel command-block" data-os-panel="windows">
-                <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-command" data-i18n="copy">Копировать</button></div>
-                <pre><code id="windows-command" class="language-powershell">$ca = @'
+   --auth-provider-arg='id-token={{ .IDToken }}'</code></pre>
+                  <h6 data-i18n="tokenStepContext">4. Создать и выбрать context</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-token-context" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="linux-token-context" class="language-bash">kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
+kubectl config use-context "{{ .ClusterName }}"</code></pre>
+                  <h6 data-i18n="tokenStepCleanup">5. Удалить временный CA-файл</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="linux-token-cleanup" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="linux-token-cleanup" class="language-bash">rm "ca-{{ .ClusterName }}.pem"</code></pre>
+             </div>
+              <div class="os-panel command-block" data-os-panel="windows">
+                  <h6>Windows PowerShell</h6>
+                  <p class="muted" data-i18n="tokenWindowsNote">Выполните шаги по порядку. Временный CA-файл удаляется на последнем шаге.</p>
+                  <h6 data-i18n="tokenStepCA">1. Сохранить CA</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-token-ca" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="windows-token-ca" class="language-powershell">$ca = @'
 {{ .ClusterCA }}
 '@
 $caPath = Join-Path (Get-Location).Path "ca-{{ .ClusterName }}.pem"
-[IO.File]::WriteAllText($caPath, $ca, [Text.Encoding]::ASCII)
-kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs
-kubectl config set-credentials "{{ .KubeCfgUser }}" `
+[IO.File]::WriteAllText($caPath, $ca, [Text.Encoding]::ASCII)</code></pre>
+                  <h6 data-i18n="tokenStepCluster">2. Добавить кластер</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-token-cluster" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="windows-token-cluster" class="language-powershell">kubectl config set-cluster "{{ .ClusterName }}" --server={{ .APIServerURL }} --certificate-authority="ca-{{ .ClusterName }}.pem" --embed-certs</code></pre>
+                  <h6 data-i18n="tokenStepCredentials">3. Добавить OIDC credentials</h6>
+                  <p class="red-text text-darken-2" data-i18n="tokenCredentialsWarning">Этот шаг содержит client secret, refresh token и ID token. Не сохраняйте команду в истории shell, Git, чатах или тикетах.</p>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-token-credentials" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="windows-token-credentials" class="language-powershell">kubectl config set-credentials "{{ .KubeCfgUser }}" `
   --auth-provider=oidc `
   --auth-provider-arg="idp-issuer-url={{ .IssuerURL }}" `
   --auth-provider-arg="client-id={{ .ClientID }}" `
   --auth-provider-arg="client-secret={{ .ClientSecret }}" `
   --auth-provider-arg="refresh-token={{ .RefreshToken }}" `
-  --auth-provider-arg="id-token={{ .IDToken }}"
-kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
-kubectl config use-context "{{ .ClusterName }}"
-Remove-Item "ca-{{ .ClusterName }}.pem"</code></pre>
-            </div>
-        </div>
-        <footer class="site-footer"><strong>{{ .ClusterName }}</strong></footer>
+  --auth-provider-arg="id-token={{ .IDToken }}"</code></pre>
+                  <h6 data-i18n="tokenStepContext">4. Создать и выбрать context</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-token-context" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="windows-token-context" class="language-powershell">kubectl config set-context "{{ .ClusterName }}" --cluster="{{ .ClusterName }}" --user="{{ .KubeCfgUser }}"
+kubectl config use-context "{{ .ClusterName }}"</code></pre>
+                  <h6 data-i18n="tokenStepCleanup">5. Удалить временный CA-файл</h6>
+                  <div class="command-toolbar"><button class="copy-button btn blue" type="button" data-copy="windows-token-cleanup" data-i18n="copy">Копировать</button></div>
+                 <pre><code id="windows-token-cleanup" class="language-powershell">Remove-Item "ca-{{ .ClusterName }}.pem"</code></pre>
+             </div>
+             </div>
+         </div>
+         </div>
+          <footer class="site-footer"></footer>
          <script>
           document.querySelectorAll('.claims-details dt').forEach(function (label, index) {
             var tooltip = label.nextElementSibling;
@@ -235,10 +318,13 @@ Remove-Item "ca-{{ .ClusterName }}.pem"</code></pre>
              document.querySelectorAll('[data-os-tab]').forEach(function (tab) { tab.addEventListener('click', function () { document.querySelectorAll('[data-os-tab], [data-os-panel]').forEach(function (item) { item.classList.remove('active'); }); tab.classList.add('active'); document.querySelector('[data-os-panel="' + tab.dataset.osTab + '"]').classList.add('active'); }); });
              document.querySelectorAll('[data-copy]').forEach(function (copyButton) { copyButton.addEventListener('click', function () { var code = document.getElementById(copyButton.dataset.copy); navigator.clipboard.writeText(code.textContent).then(function () { var old = copyButton.textContent; copyButton.textContent = language === 'ru' ? 'Скопировано' : 'Copied'; setTimeout(function () { copyButton.textContent = old; }, 1500); }); }); });
              var langButton = document.querySelector('[data-language-toggle]');
-              var translations = { ru: { welcome: 'Добро пожаловать', claims: 'Данные пользователя, полученные от провайдера идентификации:', access: 'Для доступа к кластеру Kubernetes', fromCommandLine: 'через командную строку настройте OIDC одним из способов ниже.', install: 'Установите kubectl: в Windows —', newPowerShell: '(после установки откройте новый PowerShell), в macOS —', forLinux: 'Для Linux:', download: 'Скачать kubeconfig', selectOs: 'После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.', copy: 'Копировать' }, en: { welcome: 'Welcome', claims: 'User information received from the identity provider:', access: 'To access the Kubernetes cluster', fromCommandLine: 'from the command line, configure OIDC using one of the options below.', install: 'Install kubectl: on Windows —', newPowerShell: '(open a new PowerShell after installation), on macOS —', forLinux: 'For Linux:', download: 'Download kubeconfig', selectOs: 'After installing kubectl, select your operating system and copy the entire command block.', copy: 'Copy' } };
+              var translations = { ru: { welcome: 'Добро пожаловать', claims: 'Данные пользователя, полученные от провайдера идентификации:', access: 'Для доступа к кластеру Kubernetes', fromCommandLine: 'через командную строку настройте OIDC одним из способов ниже.', install: 'Установите kubectl: в Windows —', newPowerShell: '(после установки откройте новый PowerShell), в macOS —', forLinux: 'Для Linux:', download: 'Скачать kubeconfig с токенами', downloadExec: 'Скачать kubeconfig без токенов', tokensTab: 'Kubeconfig с токенами', execTab: 'Без токенов + login utility', utilityTitle: 'Скачать gangway-login', utilityText: 'Скачайте файл под свою ОС и сделайте его доступным в PATH под именем gangway-login.', generateCode: 'Получить одноразовый код', tokenCommandsTitle: 'Настройка kubeconfig с токенами', tokenCommandsNote: 'Выберите свою операционную систему и скопируйте команды. ID token, refresh token и client secret будут записаны в kubeconfig.', tokenLinuxNote: 'Выполните шаги по порядку. Временный CA-файл удаляется на последнем шаге.', tokenStepCA: '1. Сохранить CA', tokenStepCluster: '2. Добавить кластер', tokenStepCredentials: '3. Добавить OIDC credentials', tokenCredentialsWarning: 'Этот шаг содержит client secret, refresh token и ID token. Не сохраняйте команду в истории shell, Git, чатах или тикетах.', tokenStepContext: '4. Создать и выбрать context', tokenStepCleanup: '5. Удалить временный CA-файл', tokenWindowsNote: 'Выполните шаги по порядку. Временный CA-файл удаляется на последнем шаге.', installTitle: 'Установка и запуск', installNote: 'Выберите свою ОС, скачайте helper выше и выполните команды.', loginTitle: 'Первичный вход', codeInstruction: 'Скопируйте этот код в окно, где запущен gangway-login --login:', utilityFlow: 'Один раз выполните эту команду в интерактивном терминале:', utilityFlowAfter: 'После этого kubectl использует локальный кэш автоматически до истечения токена.', selectOs: 'После установки kubectl выберите свою операционную систему и скопируйте весь блок команд.', copy: 'Копировать' }, en: { welcome: 'Welcome', claims: 'User information received from the identity provider:', access: 'To access the Kubernetes cluster', fromCommandLine: 'from the command line, configure OIDC using one of the options below.', install: 'Install kubectl: on Windows —', newPowerShell: '(open a new PowerShell after installation), in macOS —', forLinux: 'For Linux:', download: 'Download kubeconfig with tokens', downloadExec: 'Download kubeconfig without tokens', tokensTab: 'Kubeconfig with tokens', execTab: 'Without tokens + login utility', utilityTitle: 'Download gangway-login', utilityText: 'Download the file for your OS and put it on PATH as gangway-login.', generateCode: 'Generate one-time code', tokenCommandsTitle: 'Configure kubeconfig with tokens', tokenCommandsNote: 'Choose your operating system and copy the commands. The ID token, refresh token, and client secret will be written to kubeconfig.', tokenLinuxNote: 'Follow the steps in order. The temporary CA file is removed in the last step.', tokenStepCA: '1. Save the CA', tokenStepCluster: '2. Add the cluster', tokenStepCredentials: '3. Add OIDC credentials', tokenCredentialsWarning: 'This step contains the client secret, refresh token, and ID token. Do not save the command in shell history, Git, chats, or tickets.', tokenStepContext: '4. Create and select the context', tokenStepCleanup: '5. Remove the temporary CA file', tokenWindowsNote: 'Follow the steps in order. The temporary CA file is removed in the last step.', tokenStepCA: '1. Save the CA', tokenStepCluster: '2. Add the cluster', tokenStepCredentials: '3. Add OIDC credentials', tokenCredentialsWarning: 'This step contains the client secret, refresh token, and ID token. Do not save the command in shell history, Git, chats, or tickets.', tokenStepContext: '4. Create and select the context', tokenStepCleanup: '5. Remove the temporary CA file', installTitle: 'Installation and login', installNote: 'Choose your OS, download the helper above, and run the commands.', loginTitle: 'Initial login', codeInstruction: 'Paste this code into the terminal where gangway-login --login is running:', utilityFlow: 'Run this command once in an interactive terminal:', utilityFlowAfter: 'kubectl will use the protected local cache automatically until the token expires.', selectOs: 'After installing kubectl, select your operating system and copy the entire command block.', copy: 'Copy' } };
              function applyLanguage(lang) { document.documentElement.lang = lang; Object.keys(translations[lang]).forEach(function (key) { document.querySelectorAll('[data-i18n="' + key + '"]').forEach(function (item) { item.textContent = translations[lang][key]; }); }); if (langButton) langButton.textContent = lang === 'ru' ? 'RU' : 'EN'; }
              var language = localStorage.getItem('gangway-language') || 'ru'; applyLanguage(language);
-             if (langButton) langButton.addEventListener('click', function () { language = language === 'ru' ? 'en' : 'ru'; localStorage.setItem('gangway-language', language); applyLanguage(language); });
+              if (langButton) langButton.addEventListener('click', function () { language = language === 'ru' ? 'en' : 'ru'; localStorage.setItem('gangway-language', language); applyLanguage(language); });
+              document.querySelectorAll('[data-download-tab]').forEach(function (tab) { tab.addEventListener('click', function () { document.querySelectorAll('[data-download-tab], [data-download-panel]').forEach(function (item) { item.classList.remove('active'); }); tab.classList.add('active'); document.querySelector('[data-download-panel="' + tab.dataset.downloadTab + '"]').classList.add('active'); document.getElementById('legacy-commands').hidden = tab.dataset.downloadTab !== 'tokens'; }); });
+              var codeButton = document.getElementById('generate-login-code');
+              if (codeButton) codeButton.addEventListener('click', function () { var form = new URLSearchParams(); form.set('csrf_token', codeButton.dataset.csrf); fetch(codeButton.dataset.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: form.toString() }).then(function (response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.text(); }).then(function (code) { document.getElementById('login-code-value').textContent = code.trim(); document.getElementById('login-code-result').hidden = false; }).catch(function (error) { document.getElementById('login-code-value').textContent = 'Ошибка: ' + error.message; document.getElementById('login-code-result').hidden = false; }); });
            });
         </script>
     </body>

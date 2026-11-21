@@ -506,6 +506,29 @@ func TestUnauthedCommandlineHandlerRedirect(t *testing.T) {
 	}
 }
 
+func TestKubeConfigExecModeContainsNoTokens(t *testing.T) {
+	testInit()
+	testApp.Config = &config.Config{HTTPPath: "", ClusterName: "cluster", APIServerURL: "https://api.example", ClientID: "client", IssuerURL: "https://issuer.example", UsernameClaim: "sub"}
+	req := httptest.NewRequest(http.MethodGet, "/kubeconf?mode=exec", nil)
+	seedServerSession(t, req, "", "id-token", "refresh-token")
+	rr := httptest.NewRecorder()
+	testApp.kubeConfigHandler(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want %d", rr.Code, http.StatusOK)
+	}
+	var kubeconfig clientcmdapi.Config
+	if err := yaml.Unmarshal(rr.Body.Bytes(), &kubeconfig); err != nil {
+		t.Fatal(err)
+	}
+	auth := kubeconfig.AuthInfos[0].AuthInfo
+	if auth.Exec == nil || auth.Exec.Command != "gangway-login" {
+		t.Fatalf("expected gangway-login exec config, got %#v", auth.Exec)
+	}
+	if auth.AuthProvider != nil || auth.Token != "" || auth.Username != "" || auth.Password != "" {
+		t.Fatalf("exec kubeconfig contains inline credentials: %#v", auth)
+	}
+}
+
 // NewRecorder returns an initialized ResponseRecorder.
 func NewRecorder() *httptest.ResponseRecorder {
 	return &httptest.ResponseRecorder{
